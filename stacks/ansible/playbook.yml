@@ -61,7 +61,36 @@
           --disable traefik \
           --write-kubeconfig-mode 644
       args:
-        creates: /usr/local/bin/k3s-server
+        creates: /etc/systemd/system/k3s.service
+
+    - name: Ensure K3s service is started and enabled
+      ansible.builtin.systemd:
+        name: k3s
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+    - name: Verify K3s binary is available
+      ansible.builtin.command: which k3s
+      register: k3s_binary_check
+      failed_when: false
+
+    - name: Debug K3s installation status
+      ansible.builtin.debug:
+        msg: |
+          K3s binary location: {{ k3s_binary_check.stdout | default('NOT FOUND') }}
+          K3s service status will be checked next...
+
+    - name: Check K3s service status
+      ansible.builtin.systemd:
+        name: k3s
+      register: k3s_service_status
+
+    - name: Display K3s service status
+      ansible.builtin.debug:
+        msg: |
+          K3s service status: {{ k3s_service_status.status.ActiveState | default('unknown') }}
+          Service enabled: {{ k3s_service_status.status.UnitFileState | default('unknown') }}
 
     - name: Wait for K3s server to be ready
       ansible.builtin.wait_for:
@@ -108,7 +137,14 @@
           --node-external-ip "{{ ansible_default_ipv4.address }}" \
           --node-ip "{{ private_ip }}"
       args:
-        creates: /usr/local/bin/k3s-agent
+        creates: /etc/systemd/system/k3s-agent.service
+
+    - name: Ensure K3s agent service is started and enabled
+      ansible.builtin.systemd:
+        name: k3s-agent
+        state: started
+        enabled: yes
+        daemon_reload: yes
 
     - name: Wait for K3s agent to be ready
       ansible.builtin.wait_for:
@@ -121,20 +157,35 @@
   gather_facts: yes
   
   tasks:
+    - name: Check if we're running in check mode (planning)
+      ansible.builtin.debug:
+        msg: |
+          ========================================
+          ANSIBLE CHECK MODE DETECTION
+          ========================================
+          Check mode (planning): {{ ansible_check_mode }}
+          {% if ansible_check_mode %}
+          ⚠️  Running in planning mode - K3s verification tasks will be skipped
+          This is normal during Spacelift planning phase.
+          ⚠️  Actual deployment will run all verification tasks.
+          {% else %}
+          ✅ Running in deployment mode - All tasks will execute
+          {% endif %}
+          ========================================
+
     - name: Wait for all nodes to join cluster
       ansible.builtin.shell: k3s kubectl get nodes --no-headers | wc -l
       register: node_count
       retries: 20
       delay: 30
       until: node_count.stdout | int == groups['tofu'] | length
-      check_mode: no
+      when: not ansible_check_mode
 
     - name: Display current cluster status during each retry
       block:
         - name: Get current cluster state
           ansible.builtin.shell: k3s kubectl get nodes -o wide
           register: current_nodes
-          check_mode: no
           failed_when: false
 
         - name: Show detailed waiting information
@@ -161,36 +212,36 @@
               ✅ All nodes have joined the cluster!
               {% endif %}
               ========================================
-      when: node_count.stdout | int < groups['tofu'] | length
+      when: not ansible_check_mode and node_count.stdout | int < groups['tofu'] | length
 
     - name: Get cluster nodes
       ansible.builtin.command: k3s kubectl get nodes -o wide
       register: cluster_nodes
-      check_mode: no
+      when: not ansible_check_mode
 
     - name: Get cluster info
       ansible.builtin.command: k3s kubectl cluster-info
       register: cluster_info
-      check_mode: no
+      when: not ansible_check_mode
 
     - name: Read kubeconfig file
       ansible.builtin.slurp:
         src: /etc/rancher/k3s/k3s.yaml
       register: kubeconfig_content
-      check_mode: no
+      when: not ansible_check_mode
 
     - name: Create modified kubeconfig with external IP
       ansible.builtin.copy:
         content: "{{ kubeconfig_content.content | b64decode | regex_replace('127.0.0.1', ansible_default_ipv4.address) }}"
         dest: /tmp/kubeconfig.yaml
         mode: '0644'
-      check_mode: no
+      when: not ansible_check_mode
 
     - name: Read modified kubeconfig
       ansible.builtin.slurp:
         src: /tmp/kubeconfig.yaml
       register: external_kubeconfig
-      check_mode: no
+      when: not ansible_check_mode
 
     - name: Display K3s cluster information
       ansible.builtin.debug:
@@ -216,29 +267,58 @@
           Or save the kubeconfig:
           echo "KUBECONFIG_CONTENT" > ~/.kube/config
           =========================================
+      when: not ansible_check_mode
 
     - name: Save kubeconfig to local file for easy access
       ansible.builtin.copy:
         content: "{{ external_kubeconfig.content | b64decode }}"
         dest: "/tmp/k3s-kubeconfig-{{ ansible_date_time.epoch }}.yaml"
         mode: '0644'
-      check_mode: no
+      when: not ansible_check_mode
 
     - name: Test cluster access
       ansible.builtin.command: k3s kubectl get pods -A
       register: all_pods
-      check_mode: no
+      when: not ansible_check_mode
 
     - name: Display running pods
       ansible.builtin.debug:
         msg: |
           Running Pods in Cluster:
           {{ all_pods.stdout }}
+      when: not ansible_check_mode
 
     - name: Output kubeconfig for Kubernetes stack dependency
       ansible.builtin.set_stats:
         data:
           kubeconfig_content: "{{ external_kubeconfig.content | b64decode }}"
+      when: not ansible_check_mode
+
+    # Planning mode placeholder tasks
+    - name: Planning mode summary
+      ansible.builtin.debug:
+        msg: |
+          ========================================
+          📋 ANSIBLE PLANNING MODE SUMMARY
+          ========================================
+          
+          During actual deployment, this playbook will:
+          
+          1. ✅ Install K3s server on: {{ groups['tofu'][0] }}
+          2. ✅ Install K3s agents on: {{ groups['tofu'][1:] | join(', ') }}
+          3. ✅ Wait for all {{ groups['tofu'] | length }} nodes to join cluster
+          4. ✅ Generate and output kubeconfig file
+          5. ✅ Verify cluster health and display status
+          
+          Expected cluster nodes:
+          {% for host in groups['tofu'] %}
+          - {{ host }} ({{ hostvars[host]['private_ip'] }}) - {{ hostvars[host]['node_role'] | default('k8s-node') }}
+          {% endfor %}
+          
+          ⚠️  K3s installation and verification skipped during planning
+          ✅ Actual deployment will install and configure everything
+          ========================================
+      when: ansible_check_mode
 
 - name: Test Network Connectivity Between Nodes
   hosts: tofu
