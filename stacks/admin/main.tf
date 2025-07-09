@@ -10,7 +10,7 @@ terraform {
 }
 
 provider "aws" {
-  # Dont forget to set `AWS_DEFAULT_REGION` in your stack.
+  region = var.aws_default_region
 }
 
 provider "spacelift" {}
