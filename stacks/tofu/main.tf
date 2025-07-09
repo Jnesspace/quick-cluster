@@ -34,6 +34,11 @@ resource "aws_security_group" "tofusible_sg" {
   description = "Security group for Tofusible K3s cluster"
   vpc_id      = data.aws_vpc.selected.id
 
+  # Force replacement instead of in-place updates that can cause issues
+  lifecycle {
+    create_before_destroy = true
+  }
+
   # SSH access
   ingress {
     description = "SSH"
