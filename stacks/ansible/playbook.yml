@@ -1,16 +1,20 @@
 ---
-- name: Basic Infrastructure Test and Setup
+- name: Deploy K3s Cluster
   hosts: tofu
   become: yes
   gather_facts: yes
-  
+  vars:
+    k3s_version: "v1.28.5+k3s1"
+    k3s_server_node: "{{ groups['tofu'][0] }}"
+    k3s_token: "{{ ansible_date_time.epoch }}-tofusible-cluster"
+    
   tasks:
     - name: Update apt cache
       ansible.builtin.apt:
         update_cache: yes
         cache_valid_time: 3600
 
-    - name: Install basic packages
+    - name: Install required packages
       ansible.builtin.apt:
         name:
           - curl
@@ -18,90 +22,171 @@
           - htop
           - vim
           - net-tools
+          - jq
         state: present
 
-    - name: Create test file with node information
-      ansible.builtin.copy:
-        dest: /test-node-info.txt
-        content: |
-          === Tofusible Test Deployment ===
-          Node: {{ inventory_hostname }}
-          Role: {{ node_role | default('undefined') }}
-          Private IP: {{ private_ip | default(ansible_default_ipv4.address) }}
-          Instance ID: {{ instance_id | default('undefined') }}
-          Deployed: {{ ansible_date_time.iso8601 }}
-          
-          Hello from {{ ansible_hostname }}!
-          This file confirms the Ansible playbook ran successfully.
-          
-          System Information:
-          - OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
-          - Kernel: {{ ansible_kernel }}
-          - Architecture: {{ ansible_architecture }}
-          - Memory: {{ (ansible_memtotal_mb / 1024) | round(1) }}GB
-          - CPU Cores: {{ ansible_processor_vcpus }}
-        mode: '0644'
-
-    - name: Display node information
-      ansible.builtin.debug:
-        msg: |
-          Node: {{ inventory_hostname }}
-          Role: {{ node_role | default('undefined') }}
-          Private IP: {{ private_ip | default(ansible_default_ipv4.address) }}
-          Public IP: {{ ansible_default_ipv4.address }}
-          Instance: {{ instance_id | default('undefined') }}
-
-    - name: Test connectivity between nodes
-      ansible.builtin.ping:
-      delegate_to: "{{ item }}"
-      loop: "{{ groups['tofu'] }}"
-      when: item != inventory_hostname
-
-    - name: Create simple web server for testing
-      ansible.builtin.copy:
-        dest: /tmp/test-server.py
-        content: |
-          #!/usr/bin/env python3
-          import http.server
-          import socketserver
-          import socket
-          
-          PORT = 8080
-          hostname = socket.gethostname()
-          
-          class MyHandler(http.server.SimpleHTTPRequestHandler):
-              def do_GET(self):
-                  self.send_response(200)
-                  self.send_header('Content-type', 'text/html')
-                  self.end_headers()
-                  self.wfile.write(f"""
-                  <html><body>
-                  <h1>Node: {hostname}</h1>
-                  <p>Role: {{ node_role | default('undefined') }}</p>
-                  <p>Private IP: {{ private_ip | default('N/A') }}</p>
-                  <p>Time: $(date)</p>
-                  <p>Tofusible test server is running!</p>
-                  </body></html>
-                  """.encode())
-          
-          with socketserver.TCPServer(("", PORT), MyHandler) as httpd:
-              print(f"Test server running on {hostname}:{PORT}")
-              httpd.serve_forever()
+    - name: Create K3s directory
+      ansible.builtin.file:
+        path: /opt/k3s
+        state: directory
         mode: '0755'
 
-    - name: Show deployment summary
+# K3s Server Installation (First Node)
+- name: Install K3s Server
+  hosts: "{{ groups['tofu'][0] }}"
+  become: yes
+  gather_facts: yes
+  vars:
+    k3s_version: "v1.28.5+k3s1"
+    k3s_token: "{{ ansible_date_time.epoch }}-tofusible-cluster"
+    
+  tasks:
+    - name: Download K3s binary
+      ansible.builtin.get_url:
+        url: "https://github.com/k3s-io/k3s/releases/download/{{ k3s_version }}/k3s"
+        dest: /usr/local/bin/k3s
+        mode: '0755'
+        owner: root
+        group: root
+
+    - name: Install K3s server
+      ansible.builtin.shell: |
+        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" sh -s - \
+          --token "{{ k3s_token }}" \
+          --node-external-ip "{{ ansible_default_ipv4.address }}" \
+          --node-ip "{{ private_ip }}" \
+          --cluster-init \
+          --disable traefik \
+          --write-kubeconfig-mode 644
+      args:
+        creates: /usr/local/bin/k3s-server
+
+    - name: Wait for K3s server to be ready
+      ansible.builtin.wait_for:
+        port: 6443
+        host: "{{ private_ip }}"
+        delay: 10
+        timeout: 300
+
+    - name: Get K3s server status
+      ansible.builtin.command: k3s kubectl get nodes
+      register: k3s_nodes
+      retries: 5
+      delay: 10
+      until: k3s_nodes.rc == 0
+
+    - name: Display K3s server status
+      ansible.builtin.debug:
+        msg: "K3s server is ready: {{ k3s_nodes.stdout_lines }}"
+
+# K3s Agent Installation (Remaining Nodes)
+- name: Install K3s Agents
+  hosts: tofu:!{{ groups['tofu'][0] }}
+  become: yes
+  gather_facts: yes
+  vars:
+    k3s_version: "v1.28.5+k3s1"
+    k3s_token: "{{ ansible_date_time.epoch }}-tofusible-cluster"
+    k3s_server_ip: "{{ hostvars[groups['tofu'][0]]['private_ip'] }}"
+    
+  tasks:
+    - name: Download K3s binary
+      ansible.builtin.get_url:
+        url: "https://github.com/k3s-io/k3s/releases/download/{{ k3s_version }}/k3s"
+        dest: /usr/local/bin/k3s
+        mode: '0755'
+        owner: root
+        group: root
+
+    - name: Install K3s agent
+      ansible.builtin.shell: |
+        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" sh -s - agent \
+          --token "{{ k3s_token }}" \
+          --server "https://{{ k3s_server_ip }}:6443" \
+          --node-external-ip "{{ ansible_default_ipv4.address }}" \
+          --node-ip "{{ private_ip }}"
+      args:
+        creates: /usr/local/bin/k3s-agent
+
+    - name: Wait for K3s agent to be ready
+      ansible.builtin.wait_for:
+        timeout: 60
+
+# Cluster Verification and Kubeconfig Output
+- name: Verify K3s Cluster and Output Kubeconfig
+  hosts: "{{ groups['tofu'][0] }}"
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: Wait for all nodes to join cluster
+      ansible.builtin.shell: k3s kubectl get nodes --no-headers | wc -l
+      register: node_count
+      retries: 10
+      delay: 30
+      until: node_count.stdout | int == groups['tofu'] | length
+
+    - name: Get cluster nodes
+      ansible.builtin.command: k3s kubectl get nodes -o wide
+      register: cluster_nodes
+
+    - name: Get cluster info
+      ansible.builtin.command: k3s kubectl cluster-info
+      register: cluster_info
+
+    - name: Read kubeconfig file
+      ansible.builtin.slurp:
+        src: /etc/rancher/k3s/k3s.yaml
+      register: kubeconfig_content
+
+    - name: Create modified kubeconfig with external IP
+      ansible.builtin.copy:
+        content: "{{ kubeconfig_content.content | b64decode | regex_replace('127.0.0.1', ansible_default_ipv4.address) }}"
+        dest: /tmp/kubeconfig.yaml
+        mode: '0644'
+
+    - name: Read modified kubeconfig
+      ansible.builtin.slurp:
+        src: /tmp/kubeconfig.yaml
+      register: external_kubeconfig
+
+    - name: Display K3s cluster information
       ansible.builtin.debug:
         msg: |
-          ========================================
-          🎉 TOFUSIBLE DEPLOYMENT SUCCESSFUL! 🎉
-          ========================================
+          =========================================
+          🎉 K3S CLUSTER DEPLOYED SUCCESSFULLY! 🎉
+          =========================================
           
-          Node {{ inventory_hostname }} is ready!
-          - Test file created: /test-node-info.txt
-          - Basic packages installed
-          - Test server available: /tmp/test-server.py
+          Cluster Information:
+          {{ cluster_info.stdout }}
           
-          To test the web server, run:
-          python3 /tmp/test-server.py
+          Cluster Nodes:
+          {{ cluster_nodes.stdout }}
           
-          Then visit: http://{{ ansible_default_ipv4.address }}:8080
+          🔐 KUBECONFIG (save this to ~/.kube/config):
+          
+{{ external_kubeconfig.content | b64decode }}
+          
+          =========================================
+          Access your cluster with:
+          kubectl --kubeconfig=kubeconfig.yaml get nodes
+          
+          Or save the kubeconfig:
+          echo "{{ external_kubeconfig.content | b64decode }}" > ~/.kube/config
+          =========================================
+
+    - name: Save kubeconfig to local file for easy access
+      ansible.builtin.copy:
+        content: "{{ external_kubeconfig.content | b64decode }}"
+        dest: "/tmp/k3s-kubeconfig-{{ ansible_date_time.epoch }}.yaml"
+        mode: '0644'
+
+    - name: Test cluster access
+      ansible.builtin.command: k3s kubectl get pods -A
+      register: all_pods
+
+    - name: Display running pods
+      ansible.builtin.debug:
+        msg: |
+          Running Pods in Cluster:
+          {{ all_pods.stdout }}

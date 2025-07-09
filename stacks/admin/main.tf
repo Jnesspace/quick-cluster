@@ -49,13 +49,6 @@ module "stack_opentofu" {
       sensitive = false
     }
 
-    # This is the security group that will be attached to the instances
-    # NOTE: This security group should allow SSH access from the ansible stack !IMPORTANT
-    TF_VAR_vpc_security_group_id = {
-      value     = var.vpc_security_group_id
-      sensitive = false
-    }
-
     AWS_DEFAULT_REGION = {
       value     = var.aws_default_region
       sensitive = false

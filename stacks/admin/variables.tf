@@ -22,14 +22,8 @@ variable "subnet_id" {
   default     = "subnet-091efd76f6357ee16"  # eu-west-1c from your AWS query
 }
 
-variable "vpc_security_group_id" {
-  type        = string
-  description = "The security group attached to instance in the OpenTofu stack."
-  default     = ""  # Set this to a valid security group ID from your VPC
-}
-
 variable "aws_default_region" {
   type        = string
   description = "The default region to use for the AWS provider."
-  default     = "eu-west-1"  # Your current region
+  default     = "eu-west-1"
 }

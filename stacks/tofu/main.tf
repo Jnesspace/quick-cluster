@@ -28,12 +28,13 @@ variable "vpc_security_group_id" {
 
 provider "aws" {}
 
-# Create a security group that allows SSH access
+# Create a security group that allows SSH and K3s traffic
 resource "aws_security_group" "tofusible_sg" {
-  name_prefix = "tofusible-"
-  description = "Security group for Tofusible instances"
+  name_prefix = "tofusible-k3s-"
+  description = "Security group for Tofusible K3s cluster"
   vpc_id      = data.aws_vpc.selected.id
 
+  # SSH access
   ingress {
     description = "SSH"
     from_port   = 22
@@ -42,14 +43,61 @@ resource "aws_security_group" "tofusible_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Kubernetes API server
   ingress {
-    description = "HTTP"
-    from_port   = 8080
-    to_port     = 8080
+    description = "Kubernetes API"
+    from_port   = 6443
+    to_port     = 6443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # K3s server port (for agent registration)
+  ingress {
+    description = "K3s server"
+    from_port   = 6443
+    to_port     = 6443
+    protocol    = "tcp"
+    self        = true
+  }
+
+  # Flannel VXLAN
+  ingress {
+    description = "Flannel VXLAN"
+    from_port   = 8472
+    to_port     = 8472
+    protocol    = "udp"
+    self        = true
+  }
+
+  # Kubelet metrics
+  ingress {
+    description = "Kubelet metrics"
+    from_port   = 10250
+    to_port     = 10250
+    protocol    = "tcp"
+    self        = true
+  }
+
+  # NodePort services range
+  ingress {
+    description = "NodePort services"
+    from_port   = 30000
+    to_port     = 32767
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # All traffic within security group
+  ingress {
+    description = "All internal traffic"
+    from_port   = 0
+    to_port     = 65535
+    protocol    = "tcp"
+    self        = true
+  }
+
+  # All outbound traffic
   egress {
     from_port   = 0
     to_port     = 0
@@ -58,7 +106,7 @@ resource "aws_security_group" "tofusible_sg" {
   }
 
   tags = {
-    Name = "tofusible-security-group"
+    Name = "tofusible-k3s-security-group"
   }
 }
 
