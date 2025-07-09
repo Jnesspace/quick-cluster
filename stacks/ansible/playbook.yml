@@ -43,6 +43,21 @@
     k3s_token: "{{ ansible_date_time.epoch }}-tofusible-cluster"
     
   tasks:
+    - name: Check if we're running in check mode (planning)
+      ansible.builtin.debug:
+        msg: |
+          ========================================
+          K3S SERVER INSTALLATION
+          ========================================
+          Check mode (planning): {{ ansible_check_mode }}
+          {% if ansible_check_mode %}
+          ⚠️  Running in planning mode - K3s installation will be skipped
+          ⚠️  Actual deployment will install K3s server
+          {% else %}
+          ✅ Running in deployment mode - Installing K3s server
+          {% endif %}
+          ========================================
+
     - name: Download K3s binary
       ansible.builtin.get_url:
         url: "https://github.com/k3s-io/k3s/releases/download/{{ k3s_version }}/k3s"
@@ -50,6 +65,7 @@
         mode: '0755'
         owner: root
         group: root
+      when: not ansible_check_mode
 
     - name: Install K3s server
       ansible.builtin.shell: |
@@ -62,6 +78,7 @@
           --write-kubeconfig-mode 644
       args:
         creates: /etc/systemd/system/k3s.service
+      when: not ansible_check_mode
 
     - name: Ensure K3s service is started and enabled
       ansible.builtin.systemd:
@@ -69,28 +86,33 @@
         state: started
         enabled: yes
         daemon_reload: yes
+      when: not ansible_check_mode
 
     - name: Verify K3s binary is available
       ansible.builtin.command: which k3s
       register: k3s_binary_check
       failed_when: false
+      when: not ansible_check_mode
 
     - name: Debug K3s installation status
       ansible.builtin.debug:
         msg: |
           K3s binary location: {{ k3s_binary_check.stdout | default('NOT FOUND') }}
           K3s service status will be checked next...
+      when: not ansible_check_mode
 
     - name: Check K3s service status
       ansible.builtin.systemd:
         name: k3s
       register: k3s_service_status
+      when: not ansible_check_mode
 
     - name: Display K3s service status
       ansible.builtin.debug:
         msg: |
           K3s service status: {{ k3s_service_status.status.ActiveState | default('unknown') }}
           Service enabled: {{ k3s_service_status.status.UnitFileState | default('unknown') }}
+      when: not ansible_check_mode
 
     - name: Wait for K3s server to be ready
       ansible.builtin.wait_for:
@@ -98,6 +120,7 @@
         host: "{{ private_ip }}"
         delay: 10
         timeout: 300
+      when: not ansible_check_mode
 
     - name: Get K3s server status
       ansible.builtin.command: k3s kubectl get nodes
@@ -105,10 +128,34 @@
       retries: 5
       delay: 10
       until: k3s_nodes.rc == 0
+      when: not ansible_check_mode
 
     - name: Display K3s server status
       ansible.builtin.debug:
-        msg: "K3s server is ready: {{ k3s_nodes.stdout_lines }}"
+        msg: "K3s server is ready: {{ k3s_nodes.stdout_lines | default(['Not available in check mode']) }}"
+
+    # Planning mode summary for server installation
+    - name: K3s server installation summary (planning mode)
+      ansible.builtin.debug:
+        msg: |
+          ========================================
+          📋 K3S SERVER INSTALLATION PLAN
+          ========================================
+          
+          During actual deployment, this node will:
+          
+          1. ✅ Download K3s {{ k3s_version }} binary
+          2. ✅ Install K3s server with cluster-init
+          3. ✅ Configure external IP: {{ ansible_default_ipv4.address }}
+          4. ✅ Configure internal IP: {{ private_ip }}
+          5. ✅ Start and enable K3s systemd service
+          6. ✅ Wait for API server on port 6443
+          7. ✅ Verify cluster initialization
+          
+          ⚠️  Installation skipped during planning
+          ✅ Actual deployment will install everything
+          ========================================
+      when: ansible_check_mode
 
 # K3s Agent Installation (Remaining Nodes)
 - name: Install K3s Agents
@@ -121,6 +168,22 @@
     k3s_server_ip: "{{ hostvars[groups['tofu'][0]]['private_ip'] }}"
     
   tasks:
+    - name: Check if we're running in check mode (planning)
+      ansible.builtin.debug:
+        msg: |
+          ========================================
+          K3S AGENT INSTALLATION
+          ========================================
+          Check mode (planning): {{ ansible_check_mode }}
+          {% if ansible_check_mode %}
+          ⚠️  Running in planning mode - K3s agent installation will be skipped
+          ⚠️  Actual deployment will install K3s agents
+          {% else %}
+          ✅ Running in deployment mode - Installing K3s agent
+          {% endif %}
+          Server IP: {{ k3s_server_ip }}
+          ========================================
+
     - name: Download K3s binary
       ansible.builtin.get_url:
         url: "https://github.com/k3s-io/k3s/releases/download/{{ k3s_version }}/k3s"
@@ -128,6 +191,7 @@
         mode: '0755'
         owner: root
         group: root
+      when: not ansible_check_mode
 
     - name: Install K3s agent
       ansible.builtin.shell: |
@@ -138,6 +202,7 @@
           --node-ip "{{ private_ip }}"
       args:
         creates: /etc/systemd/system/k3s-agent.service
+      when: not ansible_check_mode
 
     - name: Ensure K3s agent service is started and enabled
       ansible.builtin.systemd:
@@ -145,10 +210,34 @@
         state: started
         enabled: yes
         daemon_reload: yes
+      when: not ansible_check_mode
 
     - name: Wait for K3s agent to be ready
       ansible.builtin.wait_for:
         timeout: 60
+      when: not ansible_check_mode
+
+    # Planning mode summary for agent installation
+    - name: K3s agent installation summary (planning mode)
+      ansible.builtin.debug:
+        msg: |
+          ========================================
+          📋 K3S AGENT INSTALLATION PLAN
+          ========================================
+          
+          During actual deployment, this node will:
+          
+          1. ✅ Download K3s {{ k3s_version }} binary
+          2. ✅ Install K3s agent joining server at {{ k3s_server_ip }}:6443
+          3. ✅ Configure external IP: {{ ansible_default_ipv4.address }}
+          4. ✅ Configure internal IP: {{ private_ip }}
+          5. ✅ Start and enable K3s-agent systemd service
+          6. ✅ Join the cluster automatically
+          
+          ⚠️  Installation skipped during planning
+          ✅ Actual deployment will install everything
+          ========================================
+      when: ansible_check_mode
 
 # Cluster Verification and Kubeconfig Output
 - name: Verify K3s Cluster and Output Kubeconfig
