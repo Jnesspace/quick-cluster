@@ -195,21 +195,63 @@
 
     - name: Install K3s agent
       ansible.builtin.shell: |
-        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" sh -s - agent \
+        # Set up environment for K3s installation
+        export INSTALL_K3S_VERSION="{{ k3s_version }}"
+        export K3S_TOKEN="{{ k3s_token }}"
+        export K3S_URL="https://{{ k3s_server_ip }}:6443"
+        export INSTALL_K3S_EXEC="agent"
+        
+        # Add debug logging
+        echo "Starting K3s agent installation..."
+        echo "Server IP: {{ k3s_server_ip }}"
+        echo "Node IP: {{ private_ip }}"
+        echo "External IP: {{ ansible_default_ipv4.address }}"
+        
+        # Test connectivity to server first
+        echo "Testing connectivity to K3s server..."
+        timeout 30 curl -k https://{{ k3s_server_ip }}:6443 || echo "Server not yet ready"
+        
+        # Install with timeout and explicit parameters
+        timeout 300 curl -sfL https://get.k3s.io | sh -s - agent \
           --token "{{ k3s_token }}" \
           --server "https://{{ k3s_server_ip }}:6443" \
           --node-external-ip "{{ ansible_default_ipv4.address }}" \
-          --node-ip "{{ private_ip }}"
+          --node-ip "{{ private_ip }}" \
+          --kubelet-arg="--max-pods=110" \
+          --with-node-id
       args:
         creates: /etc/systemd/system/k3s-agent.service
+        timeout: 360
+      when: not ansible_check_mode
+      register: k3s_agent_install
+      
+    - name: Display K3s agent installation output
+      ansible.builtin.debug:
+        msg: |
+          K3s agent installation output:
+          {{ k3s_agent_install.stdout | default('No stdout') }}
+          
+          K3s agent installation errors:
+          {{ k3s_agent_install.stderr | default('No stderr') }}
       when: not ansible_check_mode
 
-    - name: Ensure K3s agent service is started and enabled
+    - name: Wait for K3s agent service to be created
+      ansible.builtin.wait_for:
+        path: /etc/systemd/system/k3s-agent.service
+        timeout: 60
+      when: not ansible_check_mode
+
+    - name: Check K3s agent service status
       ansible.builtin.systemd:
         name: k3s-agent
-        state: started
-        enabled: yes
-        daemon_reload: yes
+      register: agent_service_status
+      when: not ansible_check_mode
+
+    - name: Display K3s agent service status
+      ansible.builtin.debug:
+        msg: |
+          K3s agent service status: {{ agent_service_status.status.ActiveState | default('unknown') }}
+          Service enabled: {{ agent_service_status.status.UnitFileState | default('unknown') }}
       when: not ansible_check_mode
 
     - name: Wait for K3s agent to be ready

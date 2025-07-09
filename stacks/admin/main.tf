@@ -148,7 +148,13 @@ module "stack_kubernetes" {
   project_root      = "stacks/kubernetes"
   repository_branch = "main"
 
-  workflow_tool = "TERRAFORM"
+  workflow_tool = "KUBECTL"
+
+  # Kubernetes configuration
+  kubernetes = {
+    kubectl_version = "1.33.2"
+    namespace       = ""
+  }
 
   dependencies = {
     # Depend on the Ansible stack to ensure K3s cluster is ready
