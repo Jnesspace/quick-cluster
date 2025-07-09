@@ -1,7 +1,7 @@
 variable "aws_integration_id" {
   type        = string
   description = "The AWS Integration to use for child stacks."
-  default     = "01JAZPBRW3K2YB0K7F58NZSDY6"
+  default     = "01JV4YKENC7KXV3MNBYPSH88AX"
 }
 
 variable "resource_space_id" {
@@ -13,7 +13,7 @@ variable "resource_space_id" {
 variable "ansible_worker_pool_id" {
   type        = string
   description = "The worker pool ID to use for ansible jobs."
-  default     = "01JCZY4WD38EJS5S94B64E0V1Z"
+  default     = null  # Use public worker pool
 }
 
 variable "subnet_id" {
