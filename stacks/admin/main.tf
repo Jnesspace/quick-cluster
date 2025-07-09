@@ -74,6 +74,9 @@ module "stack_ansible" {
 
   auto_deploy = true
 
+  # Skip planning phase for Ansible since K3s commands can't run in check mode
+  enable_local_preview = false
+
   environment_variables = {
     # !IMPORTANT
     # This variable tells ansible where to find the inventory file
@@ -125,6 +128,39 @@ module "stack_ansible" {
           # It tells the dynamic inventory where to get information about the hosts
           # Created in OpenTofu
           input_name = "TOFUSIBLE_INVENTORY"
+        }
+      }
+    }
+  }
+}
+
+module "stack_kubernetes" {
+  source = "spacelift.io/spacelift-solutions/stacks-module/spacelift"
+
+  description     = "Stack that deploys Kubernetes manifests to K3s cluster"
+  name            = "Tofusible - Kubernetes"
+  repository_name = "Quick-Cluster"
+  space_id        = var.resource_space_id
+
+  auto_deploy = true
+
+  labels            = ["tofusible", "kubernetes"]
+  project_root      = "stacks/kubernetes"
+  repository_branch = "main"
+
+  workflow_tool = "TERRAFORM"
+
+  dependencies = {
+    # Depend on the Ansible stack to ensure K3s cluster is ready
+    K3S_CLUSTER = {
+      parent_stack_id = module.stack_ansible.id
+
+      references = {
+        # Get the kubeconfig from the Ansible stack output
+        KUBECONFIG = {
+          trigger_always = true
+          output_name    = "kubeconfig_content"
+          input_name     = "KUBE_CONFIG_FILE_CONTENT"
         }
       }
     }

@@ -129,37 +129,38 @@
       until: node_count.stdout | int == groups['tofu'] | length
       check_mode: no
 
-    - name: Display current cluster status during wait
-      ansible.builtin.shell: k3s kubectl get nodes -o wide
-      register: current_nodes
-      check_mode: no
-      failed_when: false
+    - name: Display current cluster status during each retry
+      block:
+        - name: Get current cluster state
+          ansible.builtin.shell: k3s kubectl get nodes -o wide
+          register: current_nodes
+          check_mode: no
+          failed_when: false
 
-    - name: Show detailed waiting information
-      ansible.builtin.debug:
-        msg: |
-          ========================================
-          K3S CLUSTER JOIN STATUS
-          ========================================
-          Expected nodes: {{ groups['tofu'] | length }}
-          Current nodes found: {{ node_count.stdout | default('0') }}
-          
-          Current cluster state:
-          {{ current_nodes.stdout | default('No nodes found yet') }}
-          
-          Node details we're waiting for:
-          {% for host in groups['tofu'] %}
-          - {{ host }} ({{ hostvars[host]['private_ip'] }}) - Role: {{ hostvars[host]['node_role'] | default('undefined') }}
-          {% endfor %}
-          
-          {% if node_count.stdout | int < groups['tofu'] | length %}
-          ⏳ Still waiting for {{ groups['tofu'] | length - (node_count.stdout | int) }} more node(s) to join...
-          Next check in 30 seconds ({{ 10 - ansible_loop.index0 }} retries remaining)
-          {% else %}
-          ✅ All nodes have joined the cluster!
-          {% endif %}
-          ========================================
-      loop: "{{ range(10) | list }}"
+        - name: Show detailed waiting information
+          ansible.builtin.debug:
+            msg: |
+              ========================================
+              K3S CLUSTER JOIN STATUS (Retry {{ ansible_loop.index }}/20)
+              ========================================
+              Expected nodes: {{ groups['tofu'] | length }}
+              Current nodes found: {{ node_count.stdout | default('0') }}
+              
+              Current cluster state:
+              {{ current_nodes.stdout | default('No nodes found yet - K3s may not be running') }}
+              
+              Node details we're waiting for:
+              {% for host in groups['tofu'] %}
+              - {{ host }} ({{ hostvars[host]['private_ip'] }}) - Role: {{ hostvars[host]['node_role'] | default('k8s-node') }}
+              {% endfor %}
+              
+              {% if node_count.stdout | int < groups['tofu'] | length %}
+              ⏳ Still waiting for {{ groups['tofu'] | length - (node_count.stdout | int) }} more node(s) to join...
+              Next check in 30 seconds ({{ 20 - ansible_loop.index }} retries remaining)
+              {% else %}
+              ✅ All nodes have joined the cluster!
+              {% endif %}
+              ========================================
       when: node_count.stdout | int < groups['tofu'] | length
 
     - name: Get cluster nodes
@@ -233,6 +234,11 @@
         msg: |
           Running Pods in Cluster:
           {{ all_pods.stdout }}
+
+    - name: Output kubeconfig for Kubernetes stack dependency
+      ansible.builtin.set_stats:
+        data:
+          kubeconfig_content: "{{ external_kubeconfig.content | b64decode }}"
 
 - name: Test Network Connectivity Between Nodes
   hosts: tofu
