@@ -1,0 +1,107 @@
+---
+- name: Basic Infrastructure Test and Setup
+  hosts: tofu
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install basic packages
+      ansible.builtin.apt:
+        name:
+          - curl
+          - wget
+          - htop
+          - vim
+          - net-tools
+        state: present
+
+    - name: Create test file with node information
+      ansible.builtin.copy:
+        dest: /test-node-info.txt
+        content: |
+          === Tofusible Test Deployment ===
+          Node: {{ inventory_hostname }}
+          Role: {{ node_role | default('undefined') }}
+          Private IP: {{ private_ip | default(ansible_default_ipv4.address) }}
+          Instance ID: {{ instance_id | default('undefined') }}
+          Deployed: {{ ansible_date_time.iso8601 }}
+          
+          Hello from {{ ansible_hostname }}!
+          This file confirms the Ansible playbook ran successfully.
+          
+          System Information:
+          - OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          - Kernel: {{ ansible_kernel }}
+          - Architecture: {{ ansible_architecture }}
+          - Memory: {{ (ansible_memtotal_mb / 1024) | round(1) }}GB
+          - CPU Cores: {{ ansible_processor_vcpus }}
+        mode: '0644'
+
+    - name: Display node information
+      ansible.builtin.debug:
+        msg: |
+          Node: {{ inventory_hostname }}
+          Role: {{ node_role | default('undefined') }}
+          Private IP: {{ private_ip | default(ansible_default_ipv4.address) }}
+          Public IP: {{ ansible_default_ipv4.address }}
+          Instance: {{ instance_id | default('undefined') }}
+
+    - name: Test connectivity between nodes
+      ansible.builtin.ping:
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['tofu'] }}"
+      when: item != inventory_hostname
+
+    - name: Create simple web server for testing
+      ansible.builtin.copy:
+        dest: /tmp/test-server.py
+        content: |
+          #!/usr/bin/env python3
+          import http.server
+          import socketserver
+          import socket
+          
+          PORT = 8080
+          hostname = socket.gethostname()
+          
+          class MyHandler(http.server.SimpleHTTPRequestHandler):
+              def do_GET(self):
+                  self.send_response(200)
+                  self.send_header('Content-type', 'text/html')
+                  self.end_headers()
+                  self.wfile.write(f"""
+                  <html><body>
+                  <h1>Node: {hostname}</h1>
+                  <p>Role: {{ node_role | default('undefined') }}</p>
+                  <p>Private IP: {{ private_ip | default('N/A') }}</p>
+                  <p>Time: $(date)</p>
+                  <p>Tofusible test server is running!</p>
+                  </body></html>
+                  """.encode())
+          
+          with socketserver.TCPServer(("", PORT), MyHandler) as httpd:
+              print(f"Test server running on {hostname}:{PORT}")
+              httpd.serve_forever()
+        mode: '0755'
+
+    - name: Show deployment summary
+      ansible.builtin.debug:
+        msg: |
+          ========================================
+          🎉 TOFUSIBLE DEPLOYMENT SUCCESSFUL! 🎉
+          ========================================
+          
+          Node {{ inventory_hostname }} is ready!
+          - Test file created: /test-node-info.txt
+          - Basic packages installed
+          - Test server available: /tmp/test-server.py
+          
+          To test the web server, run:
+          python3 /tmp/test-server.py
+          
+          Then visit: http://{{ ansible_default_ipv4.address }}:8080
