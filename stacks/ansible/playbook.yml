@@ -69,13 +69,16 @@
 
     - name: Install K3s server
       ansible.builtin.shell: |
-        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" sh -s - \
+        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" sh -s - server \
           --token "{{ k3s_token }}" \
           --node-external-ip "{{ ansible_default_ipv4.address }}" \
           --node-ip "{{ private_ip }}" \
-          --cluster-init \
           --disable traefik \
-          --write-kubeconfig-mode 644
+          --disable servicelb \
+          --write-kubeconfig-mode 644 \
+          --node-taint CriticalAddonsOnly=true:NoExecute \
+          --node-label node-role.kubernetes.io/control-plane=true \
+          --node-label node-role.kubernetes.io/master=true
       args:
         creates: /etc/systemd/system/k3s.service
       when: not ansible_check_mode
@@ -122,7 +125,7 @@
         timeout: 300
       when: not ansible_check_mode
 
-    - name: Get K3s server status
+    - name: Get K3s server status and ensure single node is ready
       ansible.builtin.command: k3s kubectl get nodes
       register: k3s_nodes
       retries: 5
@@ -130,9 +133,51 @@
       until: k3s_nodes.rc == 0
       when: not ansible_check_mode
 
-    - name: Display K3s server status
+    - name: Get kubeconfig immediately after server is ready
+      ansible.builtin.slurp:
+        src: /etc/rancher/k3s/k3s.yaml
+      register: server_kubeconfig_content
+      when: not ansible_check_mode
+
+    - name: Create kubeconfig with external IP immediately
+      ansible.builtin.copy:
+        content: "{{ server_kubeconfig_content.content | b64decode | regex_replace('127.0.0.1', ansible_default_ipv4.address) }}"
+        dest: /tmp/kubeconfig-ready.yaml
+        mode: '0644'
+      when: not ansible_check_mode
+
+    - name: Read the ready kubeconfig
+      ansible.builtin.slurp:
+        src: /tmp/kubeconfig-ready.yaml
+      register: ready_kubeconfig
+      when: not ansible_check_mode
+
+    - name: Output kubeconfig immediately for Kubernetes stack
+      ansible.builtin.set_stats:
+        data:
+          kubeconfig_content: "{{ ready_kubeconfig.content | b64decode }}"
+      when: not ansible_check_mode
+
+    - name: Display immediate kubeconfig availability
       ansible.builtin.debug:
-        msg: "K3s server is ready: {{ k3s_nodes.stdout_lines | default(['Not available in check mode']) }}"
+        msg: |
+          ========================================
+          🎉 K3S SERVER READY - KUBECONFIG AVAILABLE! 🎉
+          ========================================
+          
+          The K3s server is running and kubeconfig is ready!
+          Kubernetes stack can now deploy while agents join in parallel.
+          
+          🔐 KUBECONFIG (ready for immediate use):
+          
+          {{ ready_kubeconfig.content | b64decode }}
+          
+          ========================================
+          Server Status: READY
+          API Endpoint: https://{{ ansible_default_ipv4.address }}:6443
+          ⚡ Kubernetes stack deployment can proceed immediately!
+          ========================================
+      when: not ansible_check_mode
 
     # Planning mode summary for server installation
     - name: K3s server installation summary (planning mode)
@@ -279,6 +324,85 @@
           
           ⚠️  Installation skipped during planning
           ✅ Actual deployment will install everything
+          ========================================
+      when: ansible_check_mode
+
+# Optional: Wait for Full Cluster (Agents) - This runs in parallel with Kubernetes deployment
+- name: Optional Full Cluster Verification
+  hosts: "{{ groups['tofu'][0] }}"
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: Check if we're running in check mode (planning)
+      ansible.builtin.debug:
+        msg: |
+          ========================================
+          OPTIONAL: FULL CLUSTER VERIFICATION
+          ========================================
+          Check mode (planning): {{ ansible_check_mode }}
+          {% if ansible_check_mode %}
+          ⚠️  Running in planning mode - Full cluster verification will be skipped
+          ⚠️  This runs in parallel with Kubernetes deployment
+          {% else %}
+          ✅ Running in deployment mode - Verifying all nodes joined
+          ⚡ Kubernetes stack is already deploying with the server kubeconfig!
+          {% endif %}
+          ========================================
+
+    - name: Wait for all agents to join cluster (optional verification)
+      ansible.builtin.shell: k3s kubectl get nodes --no-headers | wc -l
+      register: node_count
+      retries: 20
+      delay: 30
+      until: node_count.stdout | int == groups['tofu'] | length
+      when: not ansible_check_mode
+
+    - name: Display final full cluster status
+      block:
+        - name: Get final cluster state
+          ansible.builtin.shell: k3s kubectl get nodes -o wide
+          register: final_nodes
+          failed_when: false
+
+        - name: Show final cluster information
+          ansible.builtin.debug:
+            msg: |
+              ========================================
+              🎉 FULL K3S CLUSTER VERIFICATION COMPLETE! 🎉
+              ========================================
+              
+              All {{ groups['tofu'] | length }} nodes have joined the cluster:
+              {{ final_nodes.stdout }}
+              
+              ✅ Control Plane: Ready and serving traffic
+              ✅ Agent Nodes: All joined successfully  
+              ✅ Kubernetes Stack: Already deployed with server kubeconfig
+              
+              The cluster is fully operational!
+              ========================================
+      when: not ansible_check_mode
+
+    # Planning mode summary
+    - name: Full cluster verification summary (planning mode)
+      ansible.builtin.debug:
+        msg: |
+          ========================================
+          📋 FULL CLUSTER VERIFICATION PLAN
+          ========================================
+          
+          This optional verification will:
+          
+          1. ✅ Wait for all {{ groups['tofu'] | length }} agent nodes to join
+          2. ✅ Verify complete cluster topology
+          3. ✅ Display final cluster status
+          
+          Note: This runs in PARALLEL with Kubernetes deployment!
+          The Kubernetes stack gets the kubeconfig immediately after
+          the server is ready and doesn't wait for agents.
+          
+          ⚠️  Verification skipped during planning
+          ✅ Actual deployment will verify full cluster
           ========================================
       when: ansible_check_mode
 
