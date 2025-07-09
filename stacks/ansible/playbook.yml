@@ -165,14 +165,14 @@
           
           🔐 KUBECONFIG (save this to ~/.kube/config):
           
-{{ external_kubeconfig.content | b64decode }}
+          {{ external_kubeconfig.content | b64decode }}
           
           =========================================
           Access your cluster with:
           kubectl --kubeconfig=kubeconfig.yaml get nodes
           
           Or save the kubeconfig:
-          echo "{{ external_kubeconfig.content | b64decode }}" > ~/.kube/config
+          echo "KUBECONFIG_CONTENT" > ~/.kube/config
           =========================================
 
     - name: Save kubeconfig to local file for easy access
