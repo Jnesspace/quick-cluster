@@ -28,6 +28,40 @@ variable "vpc_security_group_id" {
 
 provider "aws" {}
 
+# Create a security group that allows SSH access
+resource "aws_security_group" "tofusible_sg" {
+  name_prefix = "tofusible-"
+  description = "Security group for Tofusible instances"
+  vpc_id      = data.aws_vpc.selected.id
+
+  ingress {
+    description = "SSH"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "HTTP"
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "tofusible-security-group"
+  }
+}
+
 # Query AWS for subnet information
 data "aws_subnet" "selected" {
   id = var.subnet_id
@@ -38,11 +72,6 @@ data "aws_vpc" "selected" {
   id = data.aws_subnet.selected.vpc_id
 }
 
-# Query AWS for security group information
-data "aws_security_group" "selected" {
-  id = var.vpc_security_group_id
-}
-
 # Query AWS for availability zone information
 data "aws_availability_zones" "available" {
   state = "available"
@@ -50,10 +79,14 @@ data "aws_availability_zones" "available" {
 
 data "aws_ami" "this" {
   most_recent = true
-  owners      = ["amazon"]
+  owners      = ["099720109477"] # Canonical
   filter {
     name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-bionic-18.04-amd64-server-*"]
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
+  }
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
   }
 }
 
@@ -66,7 +99,7 @@ resource "aws_instance" "tofu_dev_1" {
   key_name               = var.aws_private_key_name
   instance_type          = "t2.micro"
   subnet_id              = var.subnet_id
-  vpc_security_group_ids = [var.vpc_security_group_id]
+  vpc_security_group_ids = [aws_security_group.tofusible_sg.id]
   tags = {
     Name        = "tofu-dev-1"
     Environment = "dev"
@@ -79,7 +112,7 @@ resource "aws_instance" "tofu_dev_2" {
   key_name               = var.aws_private_key_name
   instance_type          = "t2.micro"
   subnet_id              = var.subnet_id
-  vpc_security_group_ids = [var.vpc_security_group_id]
+  vpc_security_group_ids = [aws_security_group.tofusible_sg.id]
   tags = {
     Name        = "tofu-dev-2"
     Environment = "dev"
@@ -92,7 +125,7 @@ resource "aws_instance" "tofu_dev_3" {
   key_name               = var.aws_private_key_name
   instance_type          = "t2.micro"
   subnet_id              = var.subnet_id
-  vpc_security_group_ids = [var.vpc_security_group_id]
+  vpc_security_group_ids = [aws_security_group.tofusible_sg.id]
   tags = {
     Name        = "tofu-dev-3"
     Environment = "dev"
@@ -168,8 +201,8 @@ output "aws_info" {
     subnet_id           = data.aws_subnet.selected.id
     subnet_cidr_block   = data.aws_subnet.selected.cidr_block
     availability_zone   = data.aws_subnet.selected.availability_zone
-    security_group_id   = data.aws_security_group.selected.id
-    security_group_name = data.aws_security_group.selected.name
+    security_group_id   = aws_security_group.tofusible_sg.id
+    security_group_name = aws_security_group.tofusible_sg.name
     ami_id              = data.aws_ami.this.id
     ami_name            = data.aws_ami.this.name
     available_azs       = data.aws_availability_zones.available.names

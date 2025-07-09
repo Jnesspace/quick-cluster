@@ -25,7 +25,7 @@ variable "subnet_id" {
 variable "vpc_security_group_id" {
   type        = string
   description = "The security group attached to instance in the OpenTofu stack."
-  default     = "sg-082b9fd0823e27f3e"  # dev-k3s-cluster-sg (best for Kubernetes)
+  default     = ""  # Set this to a valid security group ID from your VPC
 }
 
 variable "aws_default_region" {
