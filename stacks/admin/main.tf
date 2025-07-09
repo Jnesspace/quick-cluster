@@ -131,41 +131,35 @@ module "stack_ansible" {
   }
 }
 
-module "stack_kubernetes" {
-  source = "spacelift.io/spacelift-solutions/stacks-module/spacelift"
+resource "spacelift_stack" "kubernetes" {
+  name     = "Tofusible - Kubernetes"
+  space_id = var.resource_space_id
 
-  description     = "Stack that deploys Kubernetes manifests to K3s cluster"
-  name            = "Tofusible - Kubernetes"
-  repository_name = "Quick-Cluster"
-  space_id        = var.resource_space_id
+  repository = "Quick-Cluster"
+  branch     = "main"
 
-  auto_deploy = true
+  project_root = "stacks/kubernetes"
 
-  labels            = ["tofusible", "kubernetes"]
-  project_root      = "stacks/kubernetes"
-  repository_branch = "main"
-
-  workflow_tool = "KUBECTL"
-
-  # Kubernetes configuration
-  kubernetes = {
+  kubernetes {
     kubectl_version = "1.33.2"
     namespace       = ""
   }
 
-  dependencies = {
-    # Depend on the Ansible stack to ensure K3s cluster is ready
-    K3S_CLUSTER = {
-      parent_stack_id = module.stack_ansible.id
+  labels = ["tofusible", "kubernetes"]
 
-      references = {
-        # Get the kubeconfig from the Ansible stack output
-        KUBECONFIG = {
-          trigger_always = true
-          output_name    = "kubeconfig_content"
-          input_name     = "KUBE_CONFIG_FILE_CONTENT"
-        }
-      }
-    }
-  }
+  autodeploy = true
+  enable_well_known_secret_masking = true
+  github_action_deploy = false
+}
+
+resource "spacelift_stack_dependency" "kubernetes_depends_on_ansible" {
+  stack_id            = spacelift_stack.kubernetes.id
+  depends_on_stack_id = module.stack_ansible.id
+}
+
+resource "spacelift_stack_dependency_reference" "kubernetes_kubeconfig" {
+  stack_dependency_id = spacelift_stack_dependency.kubernetes_depends_on_ansible.id
+  output_name         = "kubeconfig_content"
+  input_name          = "KUBE_CONFIG_FILE_CONTENT"
+  trigger_always      = true
 }
