@@ -74,9 +74,6 @@ module "stack_ansible" {
 
   auto_deploy = true
 
-  # Skip planning phase for Ansible since K3s commands can't run in check mode
-  enable_local_preview = false
-
   environment_variables = {
     # !IMPORTANT
     # This variable tells ansible where to find the inventory file

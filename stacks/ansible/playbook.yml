@@ -221,7 +221,8 @@
           --with-node-id
       args:
         creates: /etc/systemd/system/k3s-agent.service
-        timeout: 360
+      async: 360
+      poll: 10
       when: not ansible_check_mode
       register: k3s_agent_install
       
