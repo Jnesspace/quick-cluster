@@ -23,6 +23,8 @@
           - vim
           - net-tools
           - jq
+          - iputils-ping
+          - telnet
         state: present
 
     - name: Create K3s directory
@@ -125,30 +127,69 @@
       retries: 10
       delay: 30
       until: node_count.stdout | int == groups['tofu'] | length
+      check_mode: no
+
+    - name: Display current cluster status during wait
+      ansible.builtin.shell: k3s kubectl get nodes -o wide
+      register: current_nodes
+      check_mode: no
+      failed_when: false
+
+    - name: Show detailed waiting information
+      ansible.builtin.debug:
+        msg: |
+          ========================================
+          K3S CLUSTER JOIN STATUS
+          ========================================
+          Expected nodes: {{ groups['tofu'] | length }}
+          Current nodes found: {{ node_count.stdout | default('0') }}
+          
+          Current cluster state:
+          {{ current_nodes.stdout | default('No nodes found yet') }}
+          
+          Node details we're waiting for:
+          {% for host in groups['tofu'] %}
+          - {{ host }} ({{ hostvars[host]['private_ip'] }}) - Role: {{ hostvars[host]['node_role'] | default('undefined') }}
+          {% endfor %}
+          
+          {% if node_count.stdout | int < groups['tofu'] | length %}
+          ⏳ Still waiting for {{ groups['tofu'] | length - (node_count.stdout | int) }} more node(s) to join...
+          Next check in 30 seconds ({{ 10 - ansible_loop.index0 }} retries remaining)
+          {% else %}
+          ✅ All nodes have joined the cluster!
+          {% endif %}
+          ========================================
+      loop: "{{ range(10) | list }}"
+      when: node_count.stdout | int < groups['tofu'] | length
 
     - name: Get cluster nodes
       ansible.builtin.command: k3s kubectl get nodes -o wide
       register: cluster_nodes
+      check_mode: no
 
     - name: Get cluster info
       ansible.builtin.command: k3s kubectl cluster-info
       register: cluster_info
+      check_mode: no
 
     - name: Read kubeconfig file
       ansible.builtin.slurp:
         src: /etc/rancher/k3s/k3s.yaml
       register: kubeconfig_content
+      check_mode: no
 
     - name: Create modified kubeconfig with external IP
       ansible.builtin.copy:
         content: "{{ kubeconfig_content.content | b64decode | regex_replace('127.0.0.1', ansible_default_ipv4.address) }}"
         dest: /tmp/kubeconfig.yaml
         mode: '0644'
+      check_mode: no
 
     - name: Read modified kubeconfig
       ansible.builtin.slurp:
         src: /tmp/kubeconfig.yaml
       register: external_kubeconfig
+      check_mode: no
 
     - name: Display K3s cluster information
       ansible.builtin.debug:
@@ -180,13 +221,59 @@
         content: "{{ external_kubeconfig.content | b64decode }}"
         dest: "/tmp/k3s-kubeconfig-{{ ansible_date_time.epoch }}.yaml"
         mode: '0644'
+      check_mode: no
 
     - name: Test cluster access
       ansible.builtin.command: k3s kubectl get pods -A
       register: all_pods
+      check_mode: no
 
     - name: Display running pods
       ansible.builtin.debug:
         msg: |
           Running Pods in Cluster:
           {{ all_pods.stdout }}
+
+- name: Test Network Connectivity Between Nodes
+  hosts: tofu
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: Display network information
+      ansible.builtin.debug:
+        msg: |
+          Node: {{ inventory_hostname }}
+          Private IP: {{ private_ip }}
+          Public IP: {{ ansible_default_ipv4.address }}
+          VPC CIDR: From AWS outputs
+          Subnet: {{ ansible_default_ipv4.network }}/{{ ansible_default_ipv4.netmask }}
+
+    - name: Test ping connectivity to all other nodes
+      ansible.builtin.command: ping -c 3 {{ hostvars[item]['private_ip'] }}
+      loop: "{{ groups['tofu'] }}"
+      when: item != inventory_hostname
+      register: ping_results
+      failed_when: ping_results.rc != 0
+
+    - name: Test K3s server port connectivity (6443)
+      ansible.builtin.wait_for:
+        host: "{{ hostvars[groups['tofu'][0]]['private_ip'] }}"
+        port: 6443
+        timeout: 10
+        state: started
+      when: inventory_hostname != groups['tofu'][0]
+      ignore_errors: yes
+      register: k3s_port_test
+
+    - name: Display connectivity test results
+      ansible.builtin.debug:
+        msg: |
+          ========================================
+          NETWORK CONNECTIVITY TEST RESULTS
+          ========================================
+          {% for result in ping_results.results | default([]) %}
+          Ping to {{ hostvars[result.item]['private_ip'] }}: {{ 'SUCCESS' if result.rc == 0 else 'FAILED' }}
+          {% endfor %}
+          
+          K3s Port 6443: {{ 'REACHABLE' if k3s_port_test is succeeded else 'NOT YET AVAILABLE' }}
