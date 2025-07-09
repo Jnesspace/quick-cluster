@@ -142,7 +142,6 @@ resource "spacelift_stack" "kubernetes" {
 
   kubernetes {
     kubectl_version = "1.33.2"
-    namespace       = ""
   }
 
   labels = ["tofusible", "kubernetes"]
