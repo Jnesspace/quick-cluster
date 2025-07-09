@@ -150,7 +150,7 @@ data "aws_ami" "this" {
 resource "aws_instance" "tofu_dev_1" {
   ami                    = data.aws_ami.this.id
   key_name               = var.aws_private_key_name
-  instance_type          = "t2.micro"
+  instance_type          = "t3.small"
   subnet_id              = var.subnet_id
   vpc_security_group_ids = [aws_security_group.tofusible_sg.id]
   tags = {
@@ -163,7 +163,7 @@ resource "aws_instance" "tofu_dev_1" {
 resource "aws_instance" "tofu_dev_2" {
   ami                    = data.aws_ami.this.id
   key_name               = var.aws_private_key_name
-  instance_type          = "t2.micro"
+  instance_type          = "t3.small"
   subnet_id              = var.subnet_id
   vpc_security_group_ids = [aws_security_group.tofusible_sg.id]
   tags = {
@@ -176,7 +176,7 @@ resource "aws_instance" "tofu_dev_2" {
 resource "aws_instance" "tofu_dev_3" {
   ami                    = data.aws_ami.this.id
   key_name               = var.aws_private_key_name
-  instance_type          = "t2.micro"
+  instance_type          = "t3.small"
   subnet_id              = var.subnet_id
   vpc_security_group_ids = [aws_security_group.tofusible_sg.id]
   tags = {

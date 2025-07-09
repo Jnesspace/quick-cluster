@@ -124,7 +124,7 @@
     - name: Wait for all nodes to join cluster
       ansible.builtin.shell: k3s kubectl get nodes --no-headers | wc -l
       register: node_count
-      retries: 10
+      retries: 20
       delay: 30
       until: node_count.stdout | int == groups['tofu'] | length
       check_mode: no
