@@ -6,6 +6,9 @@ terraform {
     spacelift = {
       source = "spacelift-io/spacelift"
     }
+    random = {
+      source = "hashicorp/random"
+    }
   }
 }
 
@@ -74,11 +77,27 @@ module "stack_ansible" {
 
   auto_deploy = true
 
+  aws_integration = {
+    enabled = true
+    id      = var.aws_integration_id
+  }
+
   environment_variables = {
     # !IMPORTANT
     # This variable tells ansible where to find the inventory file
     ANSIBLE_INVENTORY = {
       value     = "tofusible.yml"
+      sensitive = false
+    }
+    
+    # S3 bucket for kubeconfig storage
+    KUBECONFIG_S3_BUCKET = {
+      value     = aws_s3_bucket.kubeconfig_storage.bucket
+      sensitive = false
+    }
+    
+    AWS_DEFAULT_REGION = {
+      value     = var.aws_default_region
       sensitive = false
     }
   }
@@ -101,6 +120,22 @@ module "stack_ansible" {
       # WE *must* chmod the tofusible.yml and private key files for ansible to use them.
       init  = ["chmod 644 tofusible.yml", "chmod 600 ${local.private_key_full_path}"]
       apply = ["chmod 644 tofusible.yml", "chmod 600 ${local.private_key_full_path}"]
+    }
+    
+    after = {
+      apply = [
+        # Extract kubeconfig from Ansible output and push to S3
+        "echo 'Extracting kubeconfig from Ansible output...'",
+        "if [ -f /tmp/kubeconfig-ready.yaml ]; then",
+        "  echo 'Found kubeconfig file, uploading to S3...'",
+        "  aws s3 cp /tmp/kubeconfig-ready.yaml s3://$KUBECONFIG_S3_BUCKET/kubeconfig-$(date +%Y%m%d-%H%M%S).yaml",
+        "  aws s3 cp /tmp/kubeconfig-ready.yaml s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml",
+        "  echo \"✅ Kubeconfig uploaded to s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml\"",
+        "  echo \"📥 Download with: aws s3 cp s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml ~/.kube/config\"",
+        "else",
+        "  echo '⚠️  Kubeconfig file not found - may be running in check mode'",
+        "fi"
+      ]
     }
   }
 
@@ -129,4 +164,47 @@ module "stack_ansible" {
       }
     }
   }
+}
+
+# S3 bucket for storing kubeconfig
+resource "aws_s3_bucket" "kubeconfig_storage" {
+  bucket = "tofusible-kubeconfig-${random_id.bucket_suffix.hex}"
+  
+  tags = {
+    Name        = "Tofusible Kubeconfig Storage"
+    Environment = "dev"
+    Purpose     = "kubeconfig-storage"
+  }
+}
+
+resource "random_id" "bucket_suffix" {
+  byte_length = 4
+}
+
+resource "aws_s3_bucket_versioning" "kubeconfig_versioning" {
+  bucket = aws_s3_bucket.kubeconfig_storage.id
+  
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "kubeconfig_encryption" {
+  bucket = aws_s3_bucket.kubeconfig_storage.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+# Output S3 bucket information
+output "kubeconfig_s3_info" {
+  value = {
+    bucket_name = aws_s3_bucket.kubeconfig_storage.bucket
+    latest_url  = "s3://${aws_s3_bucket.kubeconfig_storage.bucket}/kubeconfig-latest.yaml"
+    download_command = "aws s3 cp s3://${aws_s3_bucket.kubeconfig_storage.bucket}/kubeconfig-latest.yaml ~/.kube/config"
+  }
+  description = "S3 bucket information for kubeconfig storage"
 }
