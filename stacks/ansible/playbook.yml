@@ -51,11 +51,27 @@
             src: /etc/rancher/k3s/k3s.yaml
           register: kubeconfig_content
 
+        - name: Debug kubeconfig content
+          ansible.builtin.debug:
+            msg: |
+              Original kubeconfig server line:
+              {{ kubeconfig_content.content | b64decode | regex_search('server:.*') }}
+              Private IP: {{ private_ip }}
+              Public IP: {{ ansible_default_ipv4.address }}
+
         - name: Create kubeconfig with external IP
           ansible.builtin.copy:
-            content: "{{ kubeconfig_content.content | b64decode | regex_replace('127.0.0.1|' + private_ip, ansible_default_ipv4.address) }}"
+            content: "{{ kubeconfig_content.content | b64decode | regex_replace('server: https://.*:6443', 'server: https://' + ansible_default_ipv4.address + ':6443') }}"
             dest: /tmp/kubeconfig-ready.yaml
             mode: '0644'
+
+        - name: Verify kubeconfig has correct IP
+          ansible.builtin.shell: grep "server:" /tmp/kubeconfig-ready.yaml
+          register: kubeconfig_verification
+
+        - name: Display kubeconfig verification
+          ansible.builtin.debug:
+            msg: "Fixed kubeconfig server: {{ kubeconfig_verification.stdout }}"
 
         - name: Fetch kubeconfig to Spacelift runner
           ansible.builtin.fetch:

@@ -124,12 +124,15 @@ module "stack_ansible" {
     
     after = {
       apply = [
-        "echo 'Extracting kubeconfig from Ansible output...'",
+        "echo '🔍 Checking for kubeconfig files...'",
         "ls -la /tmp/kubeconfig* || echo 'No kubeconfig files found'",
-        "test -f /tmp/kubeconfig-ready.yaml && echo 'Found kubeconfig file, uploading to S3...' || echo 'Kubeconfig file not found'",
-        "test -f /tmp/kubeconfig-ready.yaml && aws s3 cp /tmp/kubeconfig-ready.yaml s3://$KUBECONFIG_S3_BUCKET/kubeconfig-$(date +%Y%m%d-%H%M%S).yaml || true",
-        "test -f /tmp/kubeconfig-ready.yaml && aws s3 cp /tmp/kubeconfig-ready.yaml s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml || true",
-        "test -f /tmp/kubeconfig-ready.yaml && echo 'Kubeconfig uploaded to s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml' || echo 'Kubeconfig upload skipped'"
+        "echo '📄 Contents of kubeconfig if found:'",
+        "test -f /tmp/kubeconfig-ready.yaml && head -20 /tmp/kubeconfig-ready.yaml || echo 'No kubeconfig to display'",
+        "test -f /tmp/kubeconfig-ready.yaml && echo '✅ Found kubeconfig, uploading to S3...' || echo '❌ Kubeconfig not found'",
+        "test -f /tmp/kubeconfig-ready.yaml && aws s3 cp /tmp/kubeconfig-ready.yaml s3://$KUBECONFIG_S3_BUCKET/kubeconfig-$(date +%Y%m%d-%H%M%S).yaml && echo '📤 Timestamped version uploaded' || true",
+        "test -f /tmp/kubeconfig-ready.yaml && aws s3 cp /tmp/kubeconfig-ready.yaml s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml && echo '📤 Latest version uploaded' || true",
+        "test -f /tmp/kubeconfig-ready.yaml && echo '🎉 Kubeconfig available at: s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml' || echo '⚠️ Kubeconfig upload skipped'",
+        "test -f /tmp/kubeconfig-ready.yaml && echo '💾 Download with: aws s3 cp s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml ~/.kube/config' || true"
       ]
     }
   }
