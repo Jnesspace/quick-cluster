@@ -3,6 +3,9 @@ terraform {
     aws = {
       source = "hashicorp/aws"
     }
+    time = {
+      source = "hashicorp/time"
+    }
   }
 }
 
@@ -138,6 +141,9 @@ data "aws_ami" "this" {
   }
 }
 
+# Generate a timestamp to force instance recreation on each deployment
+resource "time_static" "deployment_time" {}
+
 ###############################
 ## Create 3 AWS instances for dev environment only
 ###############################
@@ -148,10 +154,19 @@ resource "aws_instance" "tofu_dev_1" {
   instance_type          = "t3.small"
   subnet_id              = var.subnet_id
   vpc_security_group_ids = [aws_security_group.tofusible_sg.id]
+
+  # Force recreation on each deployment
+  lifecycle {
+    replace_triggered_by = [
+      time_static.deployment_time
+    ]
+  }
+
   tags = {
-    Name        = "tofu-dev-1"
-    Environment = "dev"
-    Role        = "k8s-node-1"
+    Name         = "tofu-dev-1"
+    Environment  = "dev"
+    Role         = "k8s-node-1"
+    DeploymentId = time_static.deployment_time.unix
   }
 }
 
@@ -161,10 +176,19 @@ resource "aws_instance" "tofu_dev_2" {
   instance_type          = "t3.small"
   subnet_id              = var.subnet_id
   vpc_security_group_ids = [aws_security_group.tofusible_sg.id]
+
+  # Force recreation on each deployment
+  lifecycle {
+    replace_triggered_by = [
+      time_static.deployment_time
+    ]
+  }
+
   tags = {
-    Name        = "tofu-dev-2"
-    Environment = "dev"
-    Role        = "k8s-node-2"
+    Name         = "tofu-dev-2"
+    Environment  = "dev"
+    Role         = "k8s-node-2"
+    DeploymentId = time_static.deployment_time.unix
   }
 }
 
@@ -174,10 +198,19 @@ resource "aws_instance" "tofu_dev_3" {
   instance_type          = "t3.small"
   subnet_id              = var.subnet_id
   vpc_security_group_ids = [aws_security_group.tofusible_sg.id]
+
+  # Force recreation on each deployment
+  lifecycle {
+    replace_triggered_by = [
+      time_static.deployment_time
+    ]
+  }
+
   tags = {
-    Name        = "tofu-dev-3"
-    Environment = "dev"
-    Role        = "k8s-node-3"
+    Name         = "tofu-dev-3"
+    Environment  = "dev"
+    Role         = "k8s-node-3"
+    DeploymentId = time_static.deployment_time.unix
   }
 }
 
