@@ -31,27 +31,33 @@
         timeout: 10
       register: ec2_public_ip
       when: not ansible_check_mode
+      
+    - name: Fallback to ansible detected public IP if metadata fails
+      ansible.builtin.set_fact:
+        public_ip_final: "{{ ec2_public_ip.content | default(ansible_default_ipv4.address) }}"
+      when: not ansible_check_mode
 
     - name: Display IP information
       ansible.builtin.debug:
         msg: |
           Private IP: {{ private_ip }}
-          Public IP from metadata: {{ ec2_public_ip.content | default('not available') }}
+          Public IP from metadata: {{ ec2_public_ip.content | default('FAILED') }}
           Ansible detected public IP: {{ ansible_default_ipv4.address }}
+          Final public IP to use: {{ public_ip_final | default('not set') }}
       when: not ansible_check_mode
 
     - name: Install K3s server with public IP configuration
       ansible.builtin.shell: |
         curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" sh -s - server \
           --token "{{ k3s_token }}" \
-          --node-external-ip "{{ ec2_public_ip.content }}" \
+          --node-external-ip "{{ public_ip_final }}" \
           --node-ip "{{ private_ip }}" \
-          --tls-san "{{ ec2_public_ip.content }}" \
+          --tls-san "{{ public_ip_final }}" \
           --tls-san "{{ private_ip }}" \
           --tls-san "localhost" \
           --tls-san "127.0.0.1" \
           --bind-address "0.0.0.0" \
-          --advertise-address "{{ ec2_public_ip.content }}" \
+          --advertise-address "{{ public_ip_final }}" \
           --disable traefik \
           --disable servicelb \
           --write-kubeconfig-mode 644
@@ -59,12 +65,48 @@
         creates: /etc/systemd/system/k3s.service
       when: not ansible_check_mode
 
-    - name: Wait for K3s server to be ready on public IP
+    - name: Wait for K3s server to start
       ansible.builtin.wait_for:
         port: 6443
-        host: "{{ ec2_public_ip.content }}"
+        host: "127.0.0.1"
         delay: 10
         timeout: 180
+      when: not ansible_check_mode
+
+    - name: Verify TLS certificate includes public IP
+      ansible.builtin.shell: |
+        echo | openssl s_client -connect {{ public_ip_final }}:6443 -servername {{ public_ip_final }} 2>/dev/null | \
+        openssl x509 -noout -text | grep -A5 "Subject Alternative Name"
+      register: cert_sans
+      failed_when: false
+      when: not ansible_check_mode
+
+    - name: Display certificate SANs
+      ansible.builtin.debug:
+        msg: |
+          Certificate Subject Alternative Names:
+          {{ cert_sans.stdout | default('Could not retrieve certificate info') }}
+          
+          Expected to see: {{ public_ip_final }}
+      when: not ansible_check_mode
+
+    - name: Test external connectivity to public IP
+      ansible.builtin.wait_for:
+        port: 6443
+        host: "{{ public_ip_final }}"
+        delay: 5
+        timeout: 60
+      when: not ansible_check_mode
+      register: external_connectivity
+      failed_when: false
+
+    - name: Display connectivity test result
+      ansible.builtin.debug:
+        msg: |
+          External connectivity test: {{ 'SUCCESS' if external_connectivity.failed is not defined else 'FAILED' }}
+          {% if external_connectivity.failed is defined %}
+          This suggests network/security group issues
+          {% endif %}
       when: not ansible_check_mode
 
     - name: Get kubeconfig and patch for public IP access
@@ -76,7 +118,7 @@
 
         - name: Create kubeconfig with public IP
           ansible.builtin.copy:
-            content: "{{ kubeconfig_content.content | b64decode | regex_replace('server: https://127.0.0.1:6443', 'server: https://' + ec2_public_ip.content + ':6443') }}"
+            content: "{{ kubeconfig_content.content | b64decode | regex_replace('server: https://[^:]+:6443', 'server: https://' + public_ip_final + ':6443') }}"
             dest: /tmp/kubeconfig-ready.yaml
             mode: '0644'
 
