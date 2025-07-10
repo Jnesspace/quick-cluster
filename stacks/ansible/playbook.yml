@@ -57,6 +57,12 @@
             dest: /tmp/kubeconfig-ready.yaml
             mode: '0644'
 
+        - name: Fetch kubeconfig to Spacelift runner
+          ansible.builtin.fetch:
+            src: /tmp/kubeconfig-ready.yaml
+            dest: /tmp/kubeconfig-ready.yaml
+            flat: yes
+
         - name: Read the ready kubeconfig
           ansible.builtin.slurp:
             src: /tmp/kubeconfig-ready.yaml
