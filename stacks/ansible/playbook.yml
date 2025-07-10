@@ -183,14 +183,36 @@
   vars:
     k3s_version: "v1.28.5+k3s1"
     k3s_token: "{{ ansible_date_time.epoch }}-tofusible-cluster"
-    k3s_server_ip: "{{ hostvars[groups['tofu'][0]]['private_ip'] }}"
     
   tasks:
+    - name: Get server public IP from EC2 metadata
+      ansible.builtin.uri:
+        url: http://169.254.169.254/latest/meta-data/public-ipv4
+        method: GET
+        return_content: yes
+        timeout: 10
+      register: server_public_ip
+      delegate_to: "{{ groups['tofu'][0] }}"
+      when: not ansible_check_mode
+
+    - name: Set server public IP variable
+      ansible.builtin.set_fact:
+        k3s_server_public_ip: "{{ server_public_ip.content }}"
+      when: not ansible_check_mode
+
+    - name: Display agent connection info
+      ansible.builtin.debug:
+        msg: |
+          Agent {{ inventory_hostname }} will connect to:
+          Server Public IP: {{ k3s_server_public_ip }}
+          Agent Token: {{ k3s_token }}
+      when: not ansible_check_mode
+
     - name: Install K3s agent (background)
       ansible.builtin.shell: |
         curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" sh -s - agent \
           --token "{{ k3s_token }}" \
-          --server "https://{{ k3s_server_ip }}:6443" \
+          --server "https://{{ k3s_server_public_ip }}:6443" \
           --node-external-ip "{{ ansible_default_ipv4.address }}" \
           --node-ip "{{ private_ip }}"
       args:
@@ -201,5 +223,5 @@
 
     - name: Agent installation started
       ansible.builtin.debug:
-        msg: "🚀 K3s agent installation started in background for {{ inventory_hostname }}"
+        msg: "🚀 K3s agent installation started for {{ inventory_hostname }} connecting to {{ k3s_server_public_ip }}:6443"
       when: not ansible_check_mode
