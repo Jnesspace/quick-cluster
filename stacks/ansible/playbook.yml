@@ -53,7 +53,7 @@
 
         - name: Create kubeconfig with external IP
           ansible.builtin.copy:
-            content: "{{ kubeconfig_content.content | b64decode | regex_replace('127.0.0.1', ansible_default_ipv4.address) }}"
+            content: "{{ kubeconfig_content.content | b64decode | regex_replace('127.0.0.1|' + private_ip, ansible_default_ipv4.address) }}"
             dest: /tmp/kubeconfig-ready.yaml
             mode: '0644'
 
