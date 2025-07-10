@@ -21,11 +21,6 @@ variable "subnet_id" {
   description = "The subnet to use for the instances"
 }
 
-variable "vpc_security_group_id" {
-  type        = string
-  description = "The security groups to use for the instances"
-}
-
 provider "aws" {}
 
 # Create a security group that allows SSH and K3s traffic
