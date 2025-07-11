@@ -220,7 +220,7 @@ resource "spacelift_stack" "tofusible-kubernetes" {
 
   kubernetes {
     kubectl_version = "1.33.2"
-    workflow_tool = "CUSTOM"
+    kubernetes_workflow_tool = "CUSTOM"
   }
 
   labels = ["tofusible", "kubernetes"]
