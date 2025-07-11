@@ -1,0 +1,52 @@
+# .spacelift/workflow.yml
+# Download kubeconfig & wrap kubectl in one file
+
+# 1) pulls kubeconfig from S3 into ~/.kube/config, then reads from stdin
+createFromStdin: |
+  set -euo pipefail
+  mkdir -p ~/.kube
+  aws s3 cp "s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml" ~/.kube/config
+  chmod 600 ~/.kube/config
+  kubectl --kubeconfig=~/.kube/config create -f - -o yaml
+
+# 2) list API resources
+apiResources: |
+  mkdir -p ~/.kube
+  aws s3 cp "s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml" ~/.kube/config
+  chmod 600 ~/.kube/config
+  kubectl --kubeconfig=~/.kube/config api-resources {{ if .NoHeaders }}--no-headers {{ end }} --verbs=list,create {{ if .IsNamespaced }}--namespaced {{ end }} -o {{ .OutputFormat }}
+
+# 3) apply manifests (with pruning, labels, dry-run, output format, namespace)
+apply: |
+  mkdir -p ~/.kube
+  aws s3 cp "s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml" ~/.kube/config
+  chmod 600 ~/.kube/config
+  kubectl --kubeconfig=~/.kube/config apply -k ./ --prune {{ .PruneWhiteList }} -l "spacelift-stack={{ .StackSlug }}"{{ if .DryRunStrategy }} --dry-run={{ .DryRunStrategy }}{{ end }}{{ if .OutputFormat }} -o {{ .OutputFormat }}{{ end }}{{ if .Namespace }} --namespace={{ .Namespace }}{{ end }}
+
+# 4) wait for rollout
+rolloutStatus: |
+  mkdir -p ~/.kube
+  aws s3 cp "s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml" ~/.kube/config
+  chmod 600 ~/.kube/config
+  kubectl --kubeconfig=~/.kube/config rollout status{{ if .Namespace }} --namespace={{ .Namespace }}{{ end }} --timeout {{ .RolloutTimeoutInSeconds }}s -w {{ .Id }}
+
+# 5) stream pod logs / events
+getPods: |
+  mkdir -p ~/.kube
+  aws s3 cp "s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml" ~/.kube/config
+  chmod 600 ~/.kube/config
+  kubectl --kubeconfig=~/.kube/config get pods{{ if .Namespace }} --namespace={{ .Namespace }}{{ else }} --all-namespaces{{ end }} -w -l '{{ .Pods }}'
+
+# 6) delete resources by label
+delete: |
+  mkdir -p ~/.kube
+  aws s3 cp "s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml" ~/.kube/config
+  chmod 600 ~/.kube/config
+  kubectl --kubeconfig=~/.kube/config delete --ignore-not-found -l spacelift-stack={{ .StackSlug }}{{ if .Namespace }} --namespace={{ .Namespace }}{{ else }} --all-namespaces{{ end }} {{ .ResourcesToDelete }}
+
+# 7) generic get
+get: |
+  mkdir -p ~/.kube
+  aws s3 cp "s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml" ~/.kube/config
+  chmod 600 ~/.kube/config
+  kubectl --kubeconfig=~/.kube/config get -o json --show-kind --ignore-not-found -l spacelift-stack={{ .StackSlug }}
