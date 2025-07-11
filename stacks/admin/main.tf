@@ -219,7 +219,6 @@ resource "spacelift_stack" "tofusible-kubernetes" {
   project_root = "stacks/kubernetes"
 
   kubernetes {
-    kubectl_version = "1.33.2"
     kubernetes_workflow_tool = "CUSTOM"
   }
 
