@@ -225,6 +225,24 @@ resource "spacelift_stack" "tofusible-kubernetes" {
   labels = ["tofusible", "kubernetes"]
   enable_well_known_secret_masking = true
   github_action_deploy = false
+
+  # Hooks configuration
+  before_init = ["chmod +x scripts/setup-kubeconfig.sh && ./scripts/setup-kubeconfig.sh"]
+  before_apply = ["chmod +x scripts/setup-kubeconfig.sh && ./scripts/setup-kubeconfig.sh"]
+  after_apply = [
+    "echo '🎉 Hello World application deployed!'",
+    "echo '📋 Deployment Status:'",
+    "kubectl get deployments",
+    "kubectl get services", 
+    "kubectl get pods",
+    "echo ''",
+    "echo '🌐 Access your application:'",
+    "echo 'Get EC2 public IPs:'",
+    "echo 'aws ec2 describe-instances --filters \"Name=tag:Name,Values=tofu-dev-*\" --query \"Reservations[].Instances[].PublicIpAddress\" --output text'",
+    "echo ''",
+    "echo 'Then visit: http://INSTANCE_IP:30080'",
+    "echo '🚀 Your K3s cluster is ready with hello world app!'"
+  ]
 }
 
 # AWS Integration attachment for Kubernetes stack
@@ -252,36 +270,4 @@ resource "spacelift_environment_variable" "kubernetes_aws_region" {
 resource "spacelift_stack_dependency" "kubernetes_depends_on_ansible" {
   stack_id            = spacelift_stack.tofusible-kubernetes.id
   depends_on_stack_id = module.stack_ansible.id
-}
-
-# Hooks for Kubernetes stack
-resource "spacelift_hook" "kubernetes_before_init" {
-  stack_id = spacelift_stack.tofusible-kubernetes.id
-  type     = "BEFORE_INIT"
-  command  = "chmod +x scripts/setup-kubeconfig.sh && ./scripts/setup-kubeconfig.sh"
-}
-
-resource "spacelift_hook" "kubernetes_before_apply" {
-  stack_id = spacelift_stack.tofusible-kubernetes.id
-  type     = "BEFORE_APPLY"
-  command  = "chmod +x scripts/setup-kubeconfig.sh && ./scripts/setup-kubeconfig.sh"
-}
-
-resource "spacelift_hook" "kubernetes_after_apply" {
-  stack_id = spacelift_stack.tofusible-kubernetes.id
-  type     = "AFTER_APPLY"
-  command  = <<-EOT
-    echo '🎉 Hello World application deployed!'
-    echo '📋 Deployment Status:'
-    kubectl get deployments
-    kubectl get services
-    kubectl get pods
-    echo ''
-    echo '🌐 Access your application:'
-    echo 'Get EC2 public IPs:'
-    echo 'aws ec2 describe-instances --filters "Name=tag:Name,Values=tofu-dev-*" --query "Reservations[].Instances[].PublicIpAddress" --output text'
-    echo ''
-    echo 'Then visit: http://INSTANCE_IP:30080'
-    echo '🚀 Your K3s cluster is ready with hello world app!'
-  EOT
 }
