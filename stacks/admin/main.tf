@@ -191,7 +191,7 @@ module "stack_kubernetes" {
       sensitive = false
     }
   }
-
+  kubectl_version = "1.33.2"
   labels            = ["tofusible", "kubernetes"]
   project_root      = "stacks/kubernetes"
   repository_branch = "main"
