@@ -266,6 +266,13 @@ resource "spacelift_environment_variable" "kubernetes_aws_region" {
   value    = var.aws_default_region
 }
 
+# Set KUBECONFIG environment variable for the entire stack
+resource "spacelift_environment_variable" "kubernetes_kubeconfig" {
+  stack_id = spacelift_stack.tofusible-kubernetes.id
+  name     = "KUBECONFIG"
+  value    = "/home/spacelift/.kube/config"
+}
+
 # Dependency on Ansible stack
 resource "spacelift_stack_dependency" "kubernetes_depends_on_ansible" {
   stack_id            = spacelift_stack.tofusible-kubernetes.id

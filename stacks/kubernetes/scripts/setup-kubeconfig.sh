@@ -9,28 +9,32 @@ if [ -z "$KUBECONFIG_S3_BUCKET" ]; then
     exit 1
 fi
 
-# Create .kube directory
-mkdir -p ~/.kube
+# Use absolute path for .kube directory
+KUBE_DIR="/home/spacelift/.kube"
+KUBECONFIG_FILE="$KUBE_DIR/config"
 
-# Download kubeconfig from S3
+# Create .kube directory with absolute path
+mkdir -p "$KUBE_DIR"
+
+# Download kubeconfig from S3 to absolute path
 echo "📥 Downloading kubeconfig from S3..."
-aws s3 cp s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml ~/.kube/config
+aws s3 cp s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml "$KUBECONFIG_FILE"
 
 # Set proper permissions
-chmod 600 ~/.kube/config
+chmod 600 "$KUBECONFIG_FILE"
 
 # Debug: Show what we downloaded
 echo "🔍 Contents of downloaded kubeconfig:"
 echo "======================================"
-cat ~/.kube/config
+cat "$KUBECONFIG_FILE"
 echo "======================================="
 
 # Debug: Check server URL specifically
 echo "🔍 Server URL in kubeconfig:"
-grep "server:" ~/.kube/config || echo "No server URL found!"
+grep "server:" "$KUBECONFIG_FILE" || echo "No server URL found!"
 
-# Export KUBECONFIG explicitly
-export KUBECONFIG=~/.kube/config
+# Export KUBECONFIG explicitly with absolute path
+export KUBECONFIG="$KUBECONFIG_FILE"
 echo "🔧 KUBECONFIG set to: $KUBECONFIG"
 
 # Debug: Show current kubectl config
