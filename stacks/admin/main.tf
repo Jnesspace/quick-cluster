@@ -219,7 +219,6 @@ resource "spacelift_stack" "tofusible-kubernetes" {
 
   kubernetes {
     kubectl_version = "1.33.2"
-    namespace = ""
   }
 
   enable_well_known_secret_masking = true
