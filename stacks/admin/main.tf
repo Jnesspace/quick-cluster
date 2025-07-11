@@ -196,6 +196,8 @@ module "stack_kubernetes" {
   project_root      = "stacks/kubernetes"
   repository_branch = "main"
 
+  workflow_tool = "KUBECTL"
+
   hooks = {
     before = {
       init  = ["chmod +x scripts/setup-kubeconfig.sh", "./scripts/setup-kubeconfig.sh"]
@@ -221,18 +223,10 @@ module "stack_kubernetes" {
   }
 
   dependencies = {
-    # Wait for Ansible stack to complete and get S3 bucket info
+    # Simple dependency on Ansible stack completion - no output references needed
     ANSIBLE_COMPLETE = {
       parent_stack_id = module.stack_ansible.id
-
-      references = {
-        # This ensures the Kubernetes stack waits for the cluster to be ready
-        CLUSTER_READY = {
-          trigger_always = true
-          output_name = "kubeconfig_s3_info"
-          input_name = "CLUSTER_READY_SIGNAL"
-        }
-      }
+      # No references block needed - just wait for Ansible stack to complete
     }
   }
 }
