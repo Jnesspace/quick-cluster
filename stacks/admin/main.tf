@@ -196,8 +196,6 @@ module "stack_kubernetes" {
   project_root      = "stacks/kubernetes"
   repository_branch = "main"
 
-  workflow_tool = "KUBECTL"
-
   hooks = {
     before = {
       init  = ["chmod +x scripts/setup-kubeconfig.sh", "./scripts/setup-kubeconfig.sh"]
