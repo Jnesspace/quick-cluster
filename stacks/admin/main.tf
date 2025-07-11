@@ -165,6 +165,9 @@ module "stack_ansible" {
 }
 
 module "stack_kubernetes" {
+  kubernetes {
+    kubectl_version = "1.26.1" # Optional kubectl version
+  }
   source = "spacelift.io/spacelift-solutions/stacks-module/spacelift"
 
   description     = "Stack that deploys hello world app to K3s cluster"
@@ -191,7 +194,7 @@ module "stack_kubernetes" {
       sensitive = false
     }
   }
-  kubectl_version = "1.33.2"
+  
   labels            = ["tofusible", "kubernetes"]
   project_root      = "stacks/kubernetes"
   repository_branch = "main"
