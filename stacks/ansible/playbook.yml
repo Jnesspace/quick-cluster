@@ -1,12 +1,22 @@
 ---
+- name: Generate a single K3s token
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Generate K3s token
+      set_fact:
+        k3s_token: "{{ lookup('pipe','date +%s') }}-tofusible-cluster"
+
 - name: Deploy K3s Cluster
   hosts: tofu
   become: yes
   gather_facts: yes
+  pre_tasks:
+    - name: Propagate K3s token to all hosts
+      set_fact:
+        k3s_token: "{{ hostvars['localhost'].k3s_token }}"
   vars:
     k3s_version: "v1.28.5+k3s1"
-    k3s_token: "{{ ansible_date_time.epoch }}-tofusible-cluster"
-    
   tasks:
     - name: Update apt cache and install packages
       ansible.builtin.apt:
@@ -20,8 +30,6 @@
   become: yes
   vars:
     k3s_version: "v1.28.5+k3s1"
-    k3s_token: "{{ ansible_date_time.epoch }}-tofusible-cluster"
-    
   tasks:
     - name: Get public IP from EC2 metadata service
       ansible.builtin.uri:
@@ -31,7 +39,7 @@
         timeout: 10
       register: ec2_public_ip
       when: not ansible_check_mode
-      
+
     - name: Fallback to ansible detected public IP if metadata fails
       ansible.builtin.set_fact:
         public_ip_final: "{{ ec2_public_ip.content | default(ansible_default_ipv4.address) }}"
@@ -182,8 +190,6 @@
   become: yes
   vars:
     k3s_version: "v1.28.5+k3s1"
-    k3s_token: "{{ ansible_date_time.epoch }}-tofusible-cluster"
-    
   tasks:
     - name: Get server public IP from EC2 metadata
       ansible.builtin.uri:
