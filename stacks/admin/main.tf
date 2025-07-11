@@ -206,3 +206,22 @@ output "kubeconfig_s3_info" {
   }
   description = "S3 bucket information for kubeconfig storage"
 }
+
+
+
+resource "spacelift_stack" "tofusible-kubernetes" {
+  name = "Tofusible - Kubernetes"
+  space_id = "root"
+
+  repository = "quick-cluster"
+  branch = "main"
+  project_root = "/stacks/kubernetes"
+
+  kubernetes {
+    kubectl_version = "1.33.2"
+    namespace = ""
+  }
+
+  enable_well_known_secret_masking = true
+  github_action_deploy = false
+}
