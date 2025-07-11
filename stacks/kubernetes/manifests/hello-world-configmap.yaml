@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hello-world-html
+  namespace: default
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Hello World - K3s Cluster</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                margin: 0;
+                padding: 20px;
+                color: white;
+            }
+            .container {
+                max-width: 800px;
+                margin: 0 auto;
+                text-align: center;
+                padding: 40px;
+                background: rgba(255, 255, 255, 0.1);
+                border-radius: 10px;
+                box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            }
+            h1 { font-size: 3em; margin-bottom: 20px; }
+            h2 { font-size: 1.5em; margin-bottom: 30px; }
+            .info { background: rgba(255, 255, 255, 0.2); padding: 20px; border-radius: 5px; margin: 20px 0; }
+            .success { color: #4CAF50; font-weight: bold; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🎉 Hello World!</h1>
+            <h2>Your K3s cluster is working perfectly!</h2>
+            <div class="info">
+                <p><strong>Cluster:</strong> K3s on AWS EC2</p>
+                <p><strong>Orchestration:</strong> Spacelift</p>
+                <p><strong>Infrastructure:</strong> OpenTofu</p>
+                <p><strong>Configuration:</strong> Ansible</p>
+                <p><strong>Deployment:</strong> Kubectl</p>
+            </div>
+            <p class="success">✅ End-to-end deployment successful!</p>
+            <p>This nginx pod is running on your K3s cluster deployed via Spacelift.</p>
+        </div>
+    </body>
+    </html>

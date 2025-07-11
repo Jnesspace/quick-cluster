@@ -164,6 +164,81 @@ module "stack_ansible" {
   }
 }
 
+module "stack_kubernetes" {
+  source = "spacelift.io/spacelift-solutions/stacks-module/spacelift"
+
+  description     = "Stack that deploys hello world app to K3s cluster"
+  name            = "Tofusible - Kubernetes"
+  repository_name = "Quick-Cluster"
+  space_id        = var.resource_space_id
+
+  auto_deploy = true
+
+  aws_integration = {
+    enabled = true
+    id      = var.aws_integration_id
+  }
+
+  environment_variables = {
+    # S3 bucket for kubeconfig access
+    KUBECONFIG_S3_BUCKET = {
+      value     = aws_s3_bucket.kubeconfig_storage.bucket
+      sensitive = false
+    }
+    
+    AWS_DEFAULT_REGION = {
+      value     = var.aws_default_region
+      sensitive = false
+    }
+  }
+
+  labels            = ["tofusible", "kubernetes"]
+  project_root      = "stacks/kubernetes"
+  repository_branch = "main"
+
+  workflow_tool = "KUBECTL"
+
+  hooks = {
+    before = {
+      init  = ["chmod +x scripts/setup-kubeconfig.sh", "./scripts/setup-kubeconfig.sh"]
+      apply = ["chmod +x scripts/setup-kubeconfig.sh", "./scripts/setup-kubeconfig.sh"]
+    }
+    
+    after = {
+      apply = [
+        "echo '🎉 Hello World application deployed!'",
+        "echo '📋 Deployment Status:'",
+        "kubectl get deployments",
+        "kubectl get services",
+        "kubectl get pods",
+        "echo ''",
+        "echo '🌐 Access your application:'",
+        "echo 'Get EC2 public IPs:'",
+        "echo 'aws ec2 describe-instances --filters \"Name=tag:Name,Values=tofu-dev-*\" --query \"Reservations[].Instances[].PublicIpAddress\" --output text'",
+        "echo ''",
+        "echo 'Then visit: http://INSTANCE_IP:30080'",
+        "echo '🚀 Your K3s cluster is ready with hello world app!'"
+      ]
+    }
+  }
+
+  dependencies = {
+    # Wait for Ansible stack to complete and get S3 bucket info
+    ANSIBLE_COMPLETE = {
+      parent_stack_id = module.stack_ansible.id
+
+      references = {
+        # This ensures the Kubernetes stack waits for the cluster to be ready
+        CLUSTER_READY = {
+          trigger_always = true
+          output_name = "kubeconfig_s3_info"
+          input_name = "CLUSTER_READY_SIGNAL"
+        }
+      }
+    }
+  }
+}
+
 # S3 bucket for storing kubeconfig
 resource "aws_s3_bucket" "kubeconfig_storage" {
   bucket = "tofusible-kubeconfig-${random_id.bucket_suffix.hex}"
@@ -205,22 +280,4 @@ output "kubeconfig_s3_info" {
     download_command = "aws s3 cp s3://${aws_s3_bucket.kubeconfig_storage.bucket}/kubeconfig-latest.yaml ~/.kube/config"
   }
   description = "S3 bucket information for kubeconfig storage"
-}
-
-
-
-resource "spacelift_stack" "tofusible-kubernetes" {
-  name = "Tofusible - Kubernetes"
-  space_id = "root"
-
-  repository = "quick-cluster"
-  branch = "main"
-  project_root = "/stacks/kubernetes"
-
-  kubernetes {
-    kubectl_version = "1.33.2"
-  }
-
-  enable_well_known_secret_masking = true
-  github_action_deploy = false
 }
