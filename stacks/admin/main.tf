@@ -164,75 +164,6 @@ module "stack_ansible" {
   }
 }
 
-module "stack_kubernetes" {
-  kubernetes {
-    kubectl_version = "1.26.1" # Optional kubectl version
-  }
-  source = "spacelift.io/spacelift-solutions/stacks-module/spacelift"
-
-  description     = "Stack that deploys hello world app to K3s cluster"
-  name            = "Tofusible - Kubernetes"
-  repository_name = "Quick-Cluster"
-  space_id        = var.resource_space_id
-
-  auto_deploy = true
-
-  aws_integration = {
-    enabled = true
-    id      = var.aws_integration_id
-  }
-
-  environment_variables = {
-    # S3 bucket for kubeconfig access
-    KUBECONFIG_S3_BUCKET = {
-      value     = aws_s3_bucket.kubeconfig_storage.bucket
-      sensitive = false
-    }
-    
-    AWS_DEFAULT_REGION = {
-      value     = var.aws_default_region
-      sensitive = false
-    }
-  }
-  
-  labels            = ["tofusible", "kubernetes"]
-  project_root      = "stacks/kubernetes"
-  repository_branch = "main"
-
-
-  hooks = {
-    before = {
-      init  = ["chmod +x scripts/setup-kubeconfig.sh", "./scripts/setup-kubeconfig.sh"]
-      apply = ["chmod +x scripts/setup-kubeconfig.sh", "./scripts/setup-kubeconfig.sh"]
-    }
-    
-    after = {
-      apply = [
-        "echo '🎉 Hello World application deployed!'",
-        "echo '📋 Deployment Status:'",
-        "kubectl get deployments",
-        "kubectl get services",
-        "kubectl get pods",
-        "echo ''",
-        "echo '🌐 Access your application:'",
-        "echo 'Get EC2 public IPs:'",
-        "echo 'aws ec2 describe-instances --filters \"Name=tag:Name,Values=tofu-dev-*\" --query \"Reservations[].Instances[].PublicIpAddress\" --output text'",
-        "echo ''",
-        "echo 'Then visit: http://INSTANCE_IP:30080'",
-        "echo '🚀 Your K3s cluster is ready with hello world app!'"
-      ]
-    }
-  }
-
-  dependencies = {
-    # Simple dependency on Ansible stack completion - no output references needed
-    ANSIBLE_COMPLETE = {
-      parent_stack_id = module.stack_ansible.id
-      # No references block needed - just wait for Ansible stack to complete
-    }
-  }
-}
-
 # S3 bucket for storing kubeconfig
 resource "aws_s3_bucket" "kubeconfig_storage" {
   bucket = "tofusible-kubeconfig-${random_id.bucket_suffix.hex}"
@@ -274,4 +205,83 @@ output "kubeconfig_s3_info" {
     download_command = "aws s3 cp s3://${aws_s3_bucket.kubeconfig_storage.bucket}/kubeconfig-latest.yaml ~/.kube/config"
   }
   description = "S3 bucket information for kubeconfig storage"
+}
+
+
+
+resource "spacelift_stack" "tofusible-kubernetes" {
+  name         = "Tofusible - Kubernetes"
+  space_id     = var.resource_space_id
+  description  = "Stack that deploys hello world app to K3s cluster"
+
+  repository   = "Quick-Cluster"
+  branch       = "main"
+  project_root = "stacks/kubernetes"
+
+  kubernetes {
+    kubectl_version = "1.33.2"
+  }
+
+  labels = ["tofusible", "kubernetes"]
+  enable_well_known_secret_masking = true
+  github_action_deploy = false
+}
+
+# AWS Integration attachment for Kubernetes stack
+resource "spacelift_aws_integration_attachment" "kubernetes" {
+  integration_id = var.aws_integration_id
+  stack_id       = spacelift_stack.tofusible-kubernetes.id
+  read           = true
+  write          = true
+}
+
+# Environment variables for Kubernetes stack
+resource "spacelift_environment_variable" "kubernetes_s3_bucket" {
+  stack_id = spacelift_stack.tofusible-kubernetes.id
+  name     = "KUBECONFIG_S3_BUCKET"
+  value    = aws_s3_bucket.kubeconfig_storage.bucket
+}
+
+resource "spacelift_environment_variable" "kubernetes_aws_region" {
+  stack_id = spacelift_stack.tofusible-kubernetes.id
+  name     = "AWS_DEFAULT_REGION"
+  value    = var.aws_default_region
+}
+
+# Dependency on Ansible stack
+resource "spacelift_stack_dependency" "kubernetes_depends_on_ansible" {
+  stack_id            = spacelift_stack.tofusible-kubernetes.id
+  depends_on_stack_id = module.stack_ansible.id
+}
+
+# Hooks for Kubernetes stack
+resource "spacelift_hook" "kubernetes_before_init" {
+  stack_id = spacelift_stack.tofusible-kubernetes.id
+  type     = "BEFORE_INIT"
+  command  = "chmod +x scripts/setup-kubeconfig.sh && ./scripts/setup-kubeconfig.sh"
+}
+
+resource "spacelift_hook" "kubernetes_before_apply" {
+  stack_id = spacelift_stack.tofusible-kubernetes.id
+  type     = "BEFORE_APPLY"
+  command  = "chmod +x scripts/setup-kubeconfig.sh && ./scripts/setup-kubeconfig.sh"
+}
+
+resource "spacelift_hook" "kubernetes_after_apply" {
+  stack_id = spacelift_stack.tofusible-kubernetes.id
+  type     = "AFTER_APPLY"
+  command  = <<-EOT
+    echo '🎉 Hello World application deployed!'
+    echo '📋 Deployment Status:'
+    kubectl get deployments
+    kubectl get services
+    kubectl get pods
+    echo ''
+    echo '🌐 Access your application:'
+    echo 'Get EC2 public IPs:'
+    echo 'aws ec2 describe-instances --filters "Name=tag:Name,Values=tofu-dev-*" --query "Reservations[].Instances[].PublicIpAddress" --output text'
+    echo ''
+    echo 'Then visit: http://INSTANCE_IP:30080'
+    echo '🚀 Your K3s cluster is ready with hello world app!'
+  EOT
 }
