@@ -202,7 +202,7 @@ output "kubeconfig_s3_info" {
   value = {
     bucket_name = aws_s3_bucket.kubeconfig_storage.bucket
     latest_url  = "s3://${aws_s3_bucket.kubeconfig_storage.bucket}/kubeconfig-latest.yaml"
-    download_command = "aws s3 cp s3://${aws_s3_bucket.kubeconfig_storage.bucket}/kubeconfig-latest.yaml ~/.kube/config"
+    download_command = "aws s3 cp s3://${aws_s3_bucket.kubeconfig_storage.bucket}/kubeconfig-latest.yaml ~/home/spacelift/.kube/config"
   }
   description = "S3 bucket information for kubeconfig storage"
 }
