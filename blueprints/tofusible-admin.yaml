@@ -39,11 +39,17 @@ inputs:
       - t3.large
     default: t3.small
 
+  - id: stack_prefix
+    name: Stack Name Prefix (optional)
+    description: "Prefix added to all stack names; if left blank, a random string will be used"
+    type: short_text
+    default: ""
+
 options:
   trigger_run: true  # Automatically trigger a run after creation
 
 stack:
-  name: Tofusible - Admin (${{ inputs.aws_default_region }})
+  name: '${{ (inputs.stack_prefix != "" ? inputs.stack_prefix : context.random_string) + "-Tofusible-Admin" }}'
   space: root  # The blueprint creator can adjust this if needed
   description: Admin stack that provisions OpenTofu, Ansible and Kubernetes stacks.
   labels:

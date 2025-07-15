@@ -46,6 +46,7 @@ aws ec2 describe-vpcs \
    - If using existing: AWS Subnet ID
    - AWS Region
    - EC2 Instance Type (t3.small / t3.medium / t3.large)
+   - (optional) Stack Name Prefix – leave blank to auto-generate
    - (optional) Ansible Worker Pool ID
 4. Click **Create stack** – the *Admin* stack will be created and an initial run will start automatically.
 5. Wait ~10 minutes while the Admin stack provisions the OpenTofu, Ansible and Kubernetes stacks behind the scenes.
