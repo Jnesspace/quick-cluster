@@ -262,26 +262,39 @@ resource "spacelift_stack_dependency" "kubernetes_depends_on_ansible" {
   depends_on_stack_id = module.stack_ansible.id
 }
 
-resource "spacelift_hook" "kubernetes_before_init" {
-  stack_id = spacelift_stack.tofusible-kubernetes.id
-  trigger  = "before_init"
-  command  = [
+# Define a reusable Context that downloads your kubeconfig from S3
+resource "spacelift_context" "kubeconfig_hooks" {
+  name        = "Kubeconfig from S3"
+  description = "Downloads the K3s kubeconfig before init and apply"
+
+  # Runs before terraform init / kubernetes init
+  before_init = [
+    # ensure .kube dir exists
+    "mkdir -p /mnt/workspace/.kube",
+
+    # pull the latest kubeconfig
+    "aws s3 cp s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml /mnt/workspace/.kube/config",
+
+    # tighten permissions
+    "chmod 600 /mnt/workspace/.kube/config",
+
+    # debug output
+    "echo '📥 Downloaded kubeconfig from S3:'",
+    "head -20 /mnt/workspace/.kube/config",
+  ]
+
+  # Runs before terraform apply / kubernetes apply
+  before_apply = [
     "mkdir -p /mnt/workspace/.kube",
     "aws s3 cp s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml /mnt/workspace/.kube/config",
     "chmod 600 /mnt/workspace/.kube/config",
     "echo '📥 Downloaded kubeconfig from S3:'",
-    "head -20 /mnt/workspace/.kube/config"
+    "head -20 /mnt/workspace/.kube/config",
   ]
 }
 
-resource "spacelift_hook" "kubernetes_before_apply" {
-  stack_id = spacelift_stack.tofusible-kubernetes.id
-  trigger  = "before_apply"
-  command  = [
-    "mkdir -p /mnt/workspace/.kube",
-    "aws s3 cp s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml /mnt/workspace/.kube/config",
-    "chmod 600 /mnt/workspace/.kube/config",
-    "echo '📥 Downloaded kubeconfig from S3:'",
-    "head -20 /mnt/workspace/.kube/config"
-  ]
+# Attach that Context to your Kubernetes stack
+resource "spacelift_context_attachment" "tofusible_k8s_hooks" {
+  context_id = spacelift_context.kubeconfig_hooks.id
+  stack_id   = spacelift_stack.tofusible-kubernetes.id
 }
