@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mazanoke
+  labels:
+    app: mazanoke
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mazanoke
+  template:
+    metadata:
+      labels:
+        app: mazanoke
+    spec:
+      containers:
+      - name: mazanoke
+        image: ghcr.io/civilblur/mazanoke:latest
+        ports:
+        - containerPort: 80
