@@ -219,7 +219,7 @@ resource "spacelift_stack" "tofusible-kubernetes" {
   project_root = "stacks/kubernetes"
 
   kubernetes {
-    kubernetes_workflow_tool = "CUSTOM"
+    kubernetes_workflow_tool = "KUBERNETES"
   }
 
   labels = ["tofusible", "kubernetes"]
@@ -243,6 +243,25 @@ resource "spacelift_stack" "tofusible-kubernetes" {
     "echo 'Then visit: http://INSTANCE_IP:30080'",
     "echo '🚀 Your K3s cluster is ready with hello world app!'"
   ]
+
+  hooks = {
+    before = {
+      init = [
+        "mkdir -p /mnt/workspace/.kube",
+        "aws s3 cp s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml /mnt/workspace/.kube/config",
+        "chmod 600 /mnt/workspace/.kube/config",
+        "echo '📥 Downloaded kubeconfig from S3:'",
+        "head -20 /mnt/workspace/.kube/config"
+      ]
+      apply = [
+        "mkdir -p /mnt/workspace/.kube",
+        "aws s3 cp s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml /mnt/workspace/.kube/config",
+        "chmod 600 /mnt/workspace/.kube/config",
+        "echo '📥 Downloaded kubeconfig from S3:'",
+        "head -20 /mnt/workspace/.kube/config"
+      ]
+    }
+  }
 }
 
 # AWS Integration attachment for Kubernetes stack
