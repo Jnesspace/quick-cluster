@@ -222,46 +222,11 @@ resource "spacelift_stack" "tofusible-kubernetes" {
     kubernetes_workflow_tool = "KUBERNETES"
   }
 
-  labels = ["tofusible", "kubernetes"]
+  labels = ["tofusible", "kubernetes", "autoattach:Kubernetes"]
   enable_well_known_secret_masking = true
   github_action_deploy = false
 
-  # Hooks configuration
-  before_init = ["chmod +x scripts/setup-kubeconfig.sh && ./scripts/setup-kubeconfig.sh"]
-  before_apply = ["chmod +x scripts/setup-kubeconfig.sh && ./scripts/setup-kubeconfig.sh"]
-  after_apply = [
-    "echo '🎉 Hello World application deployed!'",
-    "echo '📋 Deployment Status:'",
-    "kubectl get deployments",
-    "kubectl get services", 
-    "kubectl get pods",
-    "echo ''",
-    "echo '🌐 Access your application:'",
-    "echo 'Get EC2 public IPs:'",
-    "echo 'aws ec2 describe-instances --filters \"Name=tag:Name,Values=tofu-dev-*\" --query \"Reservations[].Instances[].PublicIpAddress\" --output text'",
-    "echo ''",
-    "echo 'Then visit: http://INSTANCE_IP:30080'",
-    "echo '🚀 Your K3s cluster is ready with hello world app!'"
-  ]
-
-  hooks = {
-    before = {
-      init = [
-        "mkdir -p /mnt/workspace/.kube",
-        "aws s3 cp s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml /mnt/workspace/.kube/config",
-        "chmod 600 /mnt/workspace/.kube/config",
-        "echo '📥 Downloaded kubeconfig from S3:'",
-        "head -20 /mnt/workspace/.kube/config"
-      ]
-      apply = [
-        "mkdir -p /mnt/workspace/.kube",
-        "aws s3 cp s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml /mnt/workspace/.kube/config",
-        "chmod 600 /mnt/workspace/.kube/config",
-        "echo '📥 Downloaded kubeconfig from S3:'",
-        "head -20 /mnt/workspace/.kube/config"
-      ]
-    }
-  }
+  # Remove the hooks block here, as hooks are now managed by spacelift_hook resources
 }
 
 # AWS Integration attachment for Kubernetes stack
@@ -295,4 +260,28 @@ resource "spacelift_environment_variable" "kubernetes_kubeconfig" {
 resource "spacelift_stack_dependency" "kubernetes_depends_on_ansible" {
   stack_id            = spacelift_stack.tofusible-kubernetes.id
   depends_on_stack_id = module.stack_ansible.id
+}
+
+resource "spacelift_hook" "kubernetes_before_init" {
+  stack_id = spacelift_stack.tofusible-kubernetes.id
+  trigger  = "before_init"
+  command  = [
+    "mkdir -p /mnt/workspace/.kube",
+    "aws s3 cp s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml /mnt/workspace/.kube/config",
+    "chmod 600 /mnt/workspace/.kube/config",
+    "echo '📥 Downloaded kubeconfig from S3:'",
+    "head -20 /mnt/workspace/.kube/config"
+  ]
+}
+
+resource "spacelift_hook" "kubernetes_before_apply" {
+  stack_id = spacelift_stack.tofusible-kubernetes.id
+  trigger  = "before_apply"
+  command  = [
+    "mkdir -p /mnt/workspace/.kube",
+    "aws s3 cp s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml /mnt/workspace/.kube/config",
+    "chmod 600 /mnt/workspace/.kube/config",
+    "echo '📥 Downloaded kubeconfig from S3:'",
+    "head -20 /mnt/workspace/.kube/config"
+  ]
 }
