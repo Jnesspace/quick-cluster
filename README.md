@@ -43,7 +43,7 @@ aws ec2 describe-vpcs \
    - AWS Integration ID
    - Space ID for child resources
    - Subnet Mode (create new or use existing)
-   - If using existing: AWS Subnet ID
+   - If Subnet Mode = use_existing: AWS Subnet ID (subnet-xxxxxxxx)
    - AWS Region
    - EC2 Instance Type (t3.small / t3.medium / t3.large)
    - (optional) Stack Name Prefix – leave blank to auto-generate
