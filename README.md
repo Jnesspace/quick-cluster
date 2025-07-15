@@ -35,13 +35,20 @@ aws ec2 describe-vpcs \
   --region $AWS_REGION
 ```
 
-### Deploy with Spacelift
+### Deploy with Spacelift Blueprint
 
-1. **Create an admin stack** in Spacelift pointing to `stacks/admin`
-2. **Mark it as Administrative** in Settings → Behavior
-3. **Attach AWS integration** in Settings → Integrations
-4. **Set environment variables** (see `stacks/admin/README.md` for details)
-5. **Deploy** - it will automatically create OpenTofu and Ansible child stacks
+1. Open **Blueprints → Create blueprint** in Spacelift and paste the contents of `blueprints/tofusible-admin.yaml` (or add it from your repo).
+2. Publish the Blueprint, then choose **Create from blueprint**.
+3. Fill in the required inputs:
+   - AWS Integration ID
+   - Space ID for child resources
+   - Subnet Mode (create new or use existing)
+   - If using existing: AWS Subnet ID
+   - AWS Region
+   - EC2 Instance Type (t3.small / t3.medium / t3.large)
+   - (optional) Ansible Worker Pool ID
+4. Click **Create stack** – the *Admin* stack will be created and an initial run will start automatically.
+5. Wait ~10 minutes while the Admin stack provisions the OpenTofu, Ansible and Kubernetes stacks behind the scenes.
 
 The setup will create a 3-node K3s cluster and output the kubeconfig for immediate use.
 

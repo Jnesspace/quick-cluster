@@ -1,0 +1,89 @@
+inputs:
+  - id: aws_integration_id
+    name: AWS Integration ID
+    description: "ID of the AWS integration to attach to the stack"
+    type: short_text
+  - id: resource_space_id
+    name: Space ID for Child Resources
+    description: "Spacelift Space ID used by the OpenTofu, Ansible and Kubernetes stacks that this admin stack creates"
+    type: short_text
+  - id: subnet_id
+    name: AWS Subnet ID
+    description: "Subnet where EC2 instances will be provisioned"
+    type: short_text
+  - id: aws_default_region
+    name: AWS Region
+    description: "AWS region (e.g., eu-west-1)"
+    type: short_text
+  - id: ansible_worker_pool_id
+    name: Ansible Worker Pool ID (optional)
+    description: "Worker pool ID for Ansible runs; leave empty to use public worker pool"
+    type: short_text
+    default: ""
+  - id: subnet_mode
+    name: Subnet Mode
+    description: "Choose whether to create a new subnet or use an existing one"
+    type: select
+    options:
+      - create_new
+      - use_existing
+    default: use_existing
+
+  - id: instance_type
+    name: EC2 Instance Type
+    description: "Size of EC2 instances for the cluster"
+    type: select
+    options:
+      - t3.small
+      - t3.medium
+      - t3.large
+    default: t3.small
+
+options:
+  trigger_run: true  # Automatically trigger a run after creation
+
+stack:
+  name: Tofusible - Admin (${{ inputs.aws_default_region }})
+  space: root  # The blueprint creator can adjust this if needed
+  description: Admin stack that provisions OpenTofu, Ansible and Kubernetes stacks.
+  labels:
+    - tofusible
+    - admin
+    - blueprint
+  auto_deploy: true
+  vcs:
+    branch: main
+    repository: Quick-Cluster
+    provider: GITHUB
+    project_root: stacks/admin
+  vendor:
+    terraform:
+      manage_state: true
+      version: "1.6.0"
+      workflow_tool: OPEN_TOFU
+
+  attachments:
+    clouds:
+      aws:
+        id: ${{ inputs.aws_integration_id }}
+        read: true
+        write: true
+
+  environment:
+    variables:
+      - name: TF_VAR_aws_integration_id
+        value: ${{ inputs.aws_integration_id }}
+      - name: TF_VAR_resource_space_id
+        value: ${{ inputs.resource_space_id }}
+      - name: TF_VAR_subnet_id
+        value: ${{ inputs.subnet_mode == "use_existing" ? inputs.subnet_id : "" }}
+      - name: TF_VAR_aws_default_region
+        value: ${{ inputs.aws_default_region }}
+      - name: TF_VAR_ansible_worker_pool_id
+        value: ${{ inputs.ansible_worker_pool_id }}
+      - name: TF_VAR_create_new_subnet
+        value: '${{ inputs.subnet_mode == "create_new" ? "true" : "false" }}'
+      - name: TF_VAR_instance_type
+        value: ${{ inputs.instance_type }}
+      - name: AWS_DEFAULT_REGION
+        value: ${{ inputs.aws_default_region }} 

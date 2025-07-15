@@ -19,9 +19,22 @@ variable "private_key_path" {
   description = "The path to the private key to use for SSH"
 }
 
+variable "create_new_subnet" {
+  type        = bool
+  description = "Whether to create a new public subnet automatically. If true, var.subnet_id is ignored."
+  default     = false
+}
+
+variable "instance_type" {
+  type        = string
+  description = "EC2 instance type to use for cluster nodes."
+  default     = "t3.small"
+}
+
 variable "subnet_id" {
   type        = string
-  description = "The subnet to use for the instances"
+  description = "The subnet to use for the instances (ignored when create_new_subnet=true)"
+  default     = null
 }
 
 provider "aws" {}
@@ -30,7 +43,7 @@ provider "aws" {}
 resource "aws_security_group" "tofusible_sg" {
   name_prefix = "tofusible-k3s-"
   description = "Security group for Tofusible K3s cluster"
-  vpc_id      = data.aws_vpc.selected.id
+  vpc_id      = local.vpc_id_final
 
   # Force replacement instead of in-place updates that can cause issues
   lifecycle {
@@ -115,7 +128,13 @@ resource "aws_security_group" "tofusible_sg" {
 
 # Query AWS for subnet information
 data "aws_subnet" "selected" {
-  id = var.subnet_id
+  count = var.create_new_subnet ? 0 : 1
+  id    = var.subnet_id
+}
+
+locals {
+  subnet_id_final = var.create_new_subnet ? aws_subnet.generated[0].id : var.subnet_id
+  vpc_id_final    = var.create_new_subnet ? data.aws_vpc.default.id : element(data.aws_subnet.selected.*.vpc_id, 0)
 }
 
 # Query AWS for VPC information
@@ -151,8 +170,8 @@ resource "time_static" "deployment_time" {}
 resource "aws_instance" "tofu_dev_1" {
   ami                    = data.aws_ami.this.id
   key_name               = var.aws_private_key_name
-  instance_type          = "t3.small"
-  subnet_id              = var.subnet_id
+  instance_type          = var.instance_type
+  subnet_id              = local.subnet_id_final
   vpc_security_group_ids = [aws_security_group.tofusible_sg.id]
 
   # Force recreation on each deployment
@@ -173,8 +192,8 @@ resource "aws_instance" "tofu_dev_1" {
 resource "aws_instance" "tofu_dev_2" {
   ami                    = data.aws_ami.this.id
   key_name               = var.aws_private_key_name
-  instance_type          = "t3.small"
-  subnet_id              = var.subnet_id
+  instance_type          = var.instance_type
+  subnet_id              = local.subnet_id_final
   vpc_security_group_ids = [aws_security_group.tofusible_sg.id]
 
   # Force recreation on each deployment
@@ -195,8 +214,8 @@ resource "aws_instance" "tofu_dev_2" {
 resource "aws_instance" "tofu_dev_3" {
   ami                    = data.aws_ami.this.id
   key_name               = var.aws_private_key_name
-  instance_type          = "t3.small"
-  subnet_id              = var.subnet_id
+  instance_type          = var.instance_type
+  subnet_id              = local.subnet_id_final
   vpc_security_group_ids = [aws_security_group.tofusible_sg.id]
 
   # Force recreation on each deployment
