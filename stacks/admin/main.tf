@@ -332,7 +332,6 @@ resource "spacelift_run" "trigger_opentofu_first" {
   stack_id = module.stack_opentofu.id
   # TRACKED means normal apply run
   type     = "TRACKED"
-  wait     = true
 
   depends_on = [module.stack_opentofu]
 }
