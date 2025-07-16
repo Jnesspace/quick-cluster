@@ -3,10 +3,12 @@ inputs:
     name: AWS Integration ID
     description: "ID of the AWS integration to attach to the stack"
     type: short_text
+    default: "01JV4YKENC7KXV3MNBYPSH88AX"  # jakespace
   - id: resource_space_id
     name: Space ID for Child Resources
     description: "Spacelift Space ID used by the OpenTofu, Ansible and Kubernetes stacks that this admin stack creates"
     type: short_text
+    default: "test-01K09P35SJAB2S1C856MEGPJZX"
   - id: subnet_mode
     name: Subnet Mode
     description: "Choose whether to create a new subnet or use an existing one"
@@ -49,6 +51,12 @@ inputs:
     type: short_text
     default: ""
 
+  - id: repo_branch
+    name: Repository Branch
+    description: "Git branch of this repository to use (default: main)"
+    type: short_text
+    default: "main"
+
 options:
   trigger_run: true  # Automatically trigger a run after creation
 
@@ -62,7 +70,7 @@ stack:
     - blueprint
   auto_deploy: true
   vcs:
-    branch: main
+    branch: ${{ inputs.repo_branch }}
     repository: Quick-Cluster
     provider: GITHUB
     project_root: stacks/admin

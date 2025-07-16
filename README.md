@@ -46,6 +46,7 @@ aws ec2 describe-vpcs \
    - If Subnet Mode = use_existing: AWS Subnet ID (subnet-xxxxxxxx)
    - AWS Region
    - EC2 Instance Type (t3.small / t3.medium / t3.large)
+   - (optional) Repository Branch (defaults to main)
    - (optional) Stack Name Prefix – leave blank to auto-generate
    - (optional) Ansible Worker Pool ID
 4. Click **Create stack** – the *Admin* stack will be created and an initial run will start automatically.
