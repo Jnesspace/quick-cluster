@@ -39,6 +39,28 @@ variable "subnet_id" {
 
 provider "aws" {}
 
+# --- Added: default VPC lookup and optional subnet creation -------------------
+# Look up the default VPC so we can place the generated subnet inside it when
+# `var.create_new_subnet` is true.
+data "aws_vpc" "default" {
+  default = true
+}
+
+# Create a new public subnet if requested. When `create_new_subnet` is false the
+# count is zero, so **no subnet is created** and downstream references to
+# `aws_subnet.generated[0]` are ignored by conditionals.
+resource "aws_subnet" "generated" {
+  count                   = var.create_new_subnet ? 1 : 0
+  vpc_id                  = data.aws_vpc.default.id
+  cidr_block              = cidrsubnet(data.aws_vpc.default.cidr_block, 8, 10) # /24 within default VPC
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "tofusible-generated"
+  }
+}
+# -----------------------------------------------------------------------------
+
 # Create a security group that allows SSH and K3s traffic
 resource "aws_security_group" "tofusible_sg" {
   name_prefix = "tofusible-k3s-"
@@ -135,11 +157,6 @@ data "aws_subnet" "selected" {
 locals {
   subnet_id_final = var.create_new_subnet ? aws_subnet.generated[0].id : var.subnet_id
   vpc_id_final    = var.create_new_subnet ? data.aws_vpc.default.id : element(data.aws_subnet.selected.*.vpc_id, 0)
-}
-
-# Query AWS for VPC information
-data "aws_vpc" "selected" {
-  id = data.aws_subnet.selected.vpc_id
 }
 
 # Query AWS for availability zone information
@@ -296,11 +313,11 @@ output "inventory_tofu" {
 # Output AWS information for reference
 output "aws_info" {
   value = {
-    vpc_id              = data.aws_vpc.selected.id
-    vpc_cidr_block      = data.aws_vpc.selected.cidr_block
-    subnet_id           = data.aws_subnet.selected.id
-    subnet_cidr_block   = data.aws_subnet.selected.cidr_block
-    availability_zone   = data.aws_subnet.selected.availability_zone
+    vpc_id              = local.vpc_id_final
+    vpc_cidr_block      = var.create_new_subnet ? data.aws_vpc.default.cidr_block : data.aws_subnet.selected[0].cidr_block
+    subnet_id           = local.subnet_id_final
+    subnet_cidr_block   = var.create_new_subnet ? aws_subnet.generated[0].cidr_block : data.aws_subnet.selected[0].cidr_block
+    availability_zone   = var.create_new_subnet ? aws_subnet.generated[0].availability_zone : data.aws_subnet.selected[0].availability_zone
     security_group_id   = aws_security_group.tofusible_sg.id
     security_group_name = aws_security_group.tofusible_sg.name
     ami_id              = data.aws_ami.this.id
