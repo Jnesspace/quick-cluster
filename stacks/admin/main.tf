@@ -86,7 +86,7 @@ module "stack_opentofu" {
     tofusible_ssh_key = spacelift_context.ssh_keys.id
   }
 
-  labels            = ["tofusible", "opentofu", "infracost", "run/${local.run_tag}"]
+  labels            = [local.run_tag]
   project_root      = "stacks/tofu"
   repository_branch = "main"
 }
@@ -131,7 +131,7 @@ module "stack_ansible" {
     tofusible_ssh_key = spacelift_context.ssh_keys.id
   }
 
-  labels            = ["tofusible", "ansible", "run/${local.run_tag}"]
+  labels            = [local.run_tag]
   project_root      = "stacks/ansible"
   repository_branch = "main"
 
@@ -246,7 +246,7 @@ resource "spacelift_stack" "tofusible-kubernetes" {
     kubernetes_workflow_tool = "KUBERNETES"
   }
 
-  labels = ["tofusible", "kubernetes", "autoattach:${local.run_tag}", "run/${local.run_tag}"]
+  labels = [local.run_tag]
   enable_well_known_secret_masking = true
   github_action_deploy = false
 
