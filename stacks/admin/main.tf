@@ -192,6 +192,9 @@ module "stack_ansible" {
 # S3 bucket for storing kubeconfig
 resource "aws_s3_bucket" "kubeconfig_storage" {
   bucket = local.bucket_name
+  # Allow Terraform to delete the bucket even if it still contains
+  # versioned objects (required because we enabled versioning below).
+  force_destroy = true
   
   tags = {
     Name        = "Tofusible Kubeconfig Storage"
