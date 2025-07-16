@@ -89,7 +89,7 @@ module "stack_opentofu" {
 
   labels            = ["${local.run_tag}-opentofu"]
   project_root      = "stacks/tofu"
-  repository_branch = "main"
+  repository_branch = var.repo_branch
 }
 
 module "stack_ansible" {
@@ -134,7 +134,7 @@ module "stack_ansible" {
 
   labels            = ["${local.run_tag}-ansible"]
   project_root      = "stacks/ansible"
-  repository_branch = "main"
+  repository_branch = var.repo_branch
 
   workflow_tool    = "ANSIBLE"
   ansible_playbook = "playbook.yml"
@@ -240,7 +240,7 @@ resource "spacelift_stack" "tofusible-kubernetes" {
   description  = "Stack that deploys hello world app to K3s cluster"
 
   repository   = "Quick-Cluster"
-  branch       = "main"
+  branch       = var.repo_branch
   project_root = "stacks/kubernetes"
 
   kubernetes {
@@ -326,4 +326,13 @@ resource "spacelift_context" "kubeconfig_hooks" {
 resource "spacelift_context_attachment" "tofusible_k8s_hooks" {
   context_id = spacelift_context.kubeconfig_hooks.id
   stack_id   = spacelift_stack.tofusible-kubernetes.id
+}
+
+resource "spacelift_run" "trigger_opentofu_first" {
+  stack_id = module.stack_opentofu.id
+  # TRACKED means normal apply run
+  type     = "TRACKED"
+  wait     = true
+
+  depends_on = [module.stack_opentofu]
 }

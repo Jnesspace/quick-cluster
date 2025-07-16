@@ -41,3 +41,9 @@ variable "stack_prefix" {
   description = "Optional static prefix for all generated child stacks/contexts."
   default     = ""
 }
+
+variable "repo_branch" {
+  type        = string
+  description = "Git branch in this repository to use for all child stacks."
+  default     = "main"
+}

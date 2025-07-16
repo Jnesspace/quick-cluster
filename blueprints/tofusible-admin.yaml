@@ -106,5 +106,7 @@ stack:
         value: ${{ inputs.instance_type }}
       - name: TF_VAR_stack_prefix
         value: ${{ inputs.stack_prefix }}
+      - name: TF_VAR_repo_branch
+        value: ${{ inputs.repo_branch }}
       - name: AWS_DEFAULT_REGION
         value: ${{ inputs.aws_default_region }} 
