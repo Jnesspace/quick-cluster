@@ -87,7 +87,7 @@ module "stack_opentofu" {
     tofusible_ssh_key = spacelift_context.ssh_keys.id
   }
 
-  labels            = [local.run_tag]
+  labels            = ["${local.run_tag}-opentofu"]
   project_root      = "stacks/tofu"
   repository_branch = "main"
 }
@@ -132,7 +132,7 @@ module "stack_ansible" {
     tofusible_ssh_key = spacelift_context.ssh_keys.id
   }
 
-  labels            = [local.run_tag]
+  labels            = ["${local.run_tag}-ansible"]
   project_root      = "stacks/ansible"
   repository_branch = "main"
 
@@ -247,7 +247,7 @@ resource "spacelift_stack" "tofusible-kubernetes" {
     kubernetes_workflow_tool = "KUBERNETES"
   }
 
-  labels = [local.run_tag]
+  labels = ["${local.run_tag}-kubernetes"]
   enable_well_known_secret_masking = true
   github_action_deploy = false
 
@@ -292,7 +292,7 @@ resource "spacelift_context" "kubeconfig_hooks" {
   name        = "${local.unique_prefix}kubeconfig-hooks"
   description = "Downloads the K3s kubeconfig before init and apply"
 
-  labels = ["autoattach:${local.run_tag}"]
+  labels = ["autoattach:${local.run_tag}-kubernetes"]
 
   space_id = var.resource_space_id
 

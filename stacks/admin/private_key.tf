@@ -13,7 +13,7 @@ resource "spacelift_context" "ssh_keys" {
 
   space_id = var.resource_space_id
 
-  labels = ["autoattach:${local.run_tag}"]
+  labels = ["autoattach:${local.run_tag}-ansible"]
 }
 
 resource "spacelift_mounted_file" "ssh_private_key" {
