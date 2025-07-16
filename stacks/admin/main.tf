@@ -293,6 +293,8 @@ resource "spacelift_context" "kubeconfig_hooks" {
 
   labels = ["autoattach:${local.run_tag}"]
 
+  space_id = var.resource_space_id
+
   # Runs before terraform init / kubernetes init
   before_init = [
     # ensure .kube dir exists
