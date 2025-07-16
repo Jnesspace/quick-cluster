@@ -18,11 +18,24 @@ provider "aws" {
 
 provider "spacelift" {}
 
+resource "random_string" "name_suffix" {
+  length  = 5
+  upper   = false
+  special = false
+}
+
+locals {
+  name_prefix = (
+    var.stack_prefix != "" ? "${var.stack_prefix}-" : ""
+  )
+  unique_prefix = "${local.name_prefix}${random_string.name_suffix.result}-"
+}
+
 module "stack_opentofu" {
   source = "spacelift.io/spacelift-solutions/stacks-module/spacelift"
 
   description     = "Stack that creates EC2 Servers"
-  name            = "Tofusible - OpenTofu"
+  name            = "${local.unique_prefix}Tofusible - OpenTofu"
   repository_name = "Quick-Cluster"
   space_id        = var.resource_space_id
 
@@ -81,7 +94,7 @@ module "stack_ansible" {
   source = "spacelift.io/spacelift-solutions/stacks-module/spacelift"
 
   description     = "Stack that configures EC2 servers"
-  name            = "Tofusible - Ansible"
+  name            = "${local.unique_prefix}Tofusible - Ansible"
   repository_name = "Quick-Cluster"
   space_id        = var.resource_space_id
 
@@ -220,7 +233,7 @@ output "kubeconfig_s3_info" {
 
 
 resource "spacelift_stack" "tofusible-kubernetes" {
-  name         = "Tofusible - Kubernetes"
+  name         = "${local.unique_prefix}Tofusible - Kubernetes"
   space_id     = var.resource_space_id
   description  = "Stack that deploys hello world app to K3s cluster"
 
@@ -274,7 +287,7 @@ resource "spacelift_stack_dependency" "kubernetes_depends_on_ansible" {
 
 # Define a reusable Context that downloads your kubeconfig from S3
 resource "spacelift_context" "kubeconfig_hooks" {
-  name        = "Kubeconfig from S3"
+  name        = "${local.unique_prefix}kubeconfig-hooks"
   description = "Downloads the K3s kubeconfig before init and apply"
 
   # Runs before terraform init / kubernetes init

@@ -104,5 +104,7 @@ stack:
         value: '${{ inputs.subnet_mode == "create_new" ? "true" : "false" }}'
       - name: TF_VAR_instance_type
         value: ${{ inputs.instance_type }}
+      - name: TF_VAR_stack_prefix
+        value: ${{ inputs.stack_prefix }}
       - name: AWS_DEFAULT_REGION
         value: ${{ inputs.aws_default_region }} 

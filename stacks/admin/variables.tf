@@ -35,3 +35,9 @@ variable "instance_type" {
   description = "EC2 instance type used by the OpenTofu stack."
   default     = "t3.small"
 }
+
+variable "stack_prefix" {
+  type        = string
+  description = "Optional static prefix for all generated child stacks/contexts."
+  default     = ""
+}
