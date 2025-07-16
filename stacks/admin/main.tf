@@ -327,11 +327,3 @@ resource "spacelift_context_attachment" "tofusible_k8s_hooks" {
   context_id = spacelift_context.kubeconfig_hooks.id
   stack_id   = spacelift_stack.tofusible-kubernetes.id
 }
-
-resource "spacelift_run" "trigger_opentofu_first" {
-  stack_id = module.stack_opentofu.id
-  # TRACKED means normal apply run
-  type     = "TRACKED"
-
-  depends_on = [module.stack_opentofu]
-}
