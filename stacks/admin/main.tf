@@ -29,6 +29,7 @@ locals {
     var.stack_prefix != "" ? "${var.stack_prefix}-" : ""
   )
   unique_prefix = "${local.name_prefix}${random_string.name_suffix.result}-"
+  run_tag       = trimsuffix(local.unique_prefix, "-")
 }
 
 module "stack_opentofu" {
@@ -85,7 +86,7 @@ module "stack_opentofu" {
     tofusible_ssh_key = spacelift_context.ssh_keys.id
   }
 
-  labels            = ["tofusible", "opentofu", "infracost"]
+  labels            = ["tofusible", "opentofu", "infracost", "run/${local.run_tag}"]
   project_root      = "stacks/tofu"
   repository_branch = "main"
 }
@@ -130,7 +131,7 @@ module "stack_ansible" {
     tofusible_ssh_key = spacelift_context.ssh_keys.id
   }
 
-  labels            = ["tofusible", "ansible"]
+  labels            = ["tofusible", "ansible", "run/${local.run_tag}"]
   project_root      = "stacks/ansible"
   repository_branch = "main"
 
@@ -245,7 +246,7 @@ resource "spacelift_stack" "tofusible-kubernetes" {
     kubernetes_workflow_tool = "KUBERNETES"
   }
 
-  labels = ["tofusible", "kubernetes", "autoattach:Kubernetes"]
+  labels = ["tofusible", "kubernetes", "autoattach:${local.run_tag}", "run/${local.run_tag}"]
   enable_well_known_secret_masking = true
   github_action_deploy = false
 
