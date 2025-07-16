@@ -52,7 +52,8 @@ data "aws_vpc" "default" {
 resource "aws_subnet" "generated" {
   count                   = var.create_new_subnet ? 1 : 0
   vpc_id                  = data.aws_vpc.default.id
-  cidr_block              = cidrsubnet(data.aws_vpc.default.cidr_block, 8, 10) # /24 within default VPC
+  # Choose a /24 far away from the typical default /20 ranges (0,16,32,48, etc.)
+  cidr_block              = cidrsubnet(data.aws_vpc.default.cidr_block, 8, 200) # 172.31.200.0/24 within default VPC
   map_public_ip_on_launch = true
 
   tags = {
