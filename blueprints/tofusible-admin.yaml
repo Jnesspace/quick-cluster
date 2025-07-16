@@ -62,7 +62,8 @@ options:
 
 stack:
   name: '${{ (inputs.stack_prefix != "" ? inputs.stack_prefix : context.random_string) + "-Tofusible-Admin" }}'
-  space: root  # The blueprint creator can adjust this if needed
+  space: ${{ inputs.resource_space_id }}
+  administrative: true
   description: Admin stack that provisions OpenTofu, Ansible and Kubernetes stacks.
   labels:
     - tofusible

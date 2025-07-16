@@ -4,7 +4,7 @@ resource "tls_private_key" "this" {
 }
 
 resource "aws_key_pair" "this" {
-  key_name   = "ssh_example_tofu_ansible"
+  key_name   = "ssh_example_tofu_ansible-${random_id.bucket_suffix.hex}"
   public_key = tls_private_key.this.public_key_openssh
 }
 
