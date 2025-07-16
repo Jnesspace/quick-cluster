@@ -9,7 +9,7 @@ resource "aws_key_pair" "this" {
 }
 
 resource "spacelift_context" "ssh_keys" {
-  name = "${local.unique_prefix}ssh-key"
+  name = "${local.unique_tag}ssh-key"
 
   space_id = var.resource_space_id
 

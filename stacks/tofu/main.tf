@@ -65,7 +65,7 @@ resource "aws_subnet" "generated" {
 # Create a security group that allows SSH and K3s traffic
 resource "aws_security_group" "tofusible_sg" {
   name_prefix = "tofusible-k3s-"
-  description = "Security group for Tofusible K3s cluster"
+  description = "Security group for TofusibleKube K3s cluster"
   vpc_id      = local.vpc_id_final
 
   # Force replacement instead of in-place updates that can cause issues

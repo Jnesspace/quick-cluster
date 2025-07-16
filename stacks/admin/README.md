@@ -53,8 +53,12 @@ When setting up the admin stack, the following environment variables should be a
 - `TF_VAR_aws_integration_id` - The AWS Integration ID from your Spacelift account
 - `TF_VAR_resource_space_id` - The Space ID where you want to create the child stacks
 - `TF_VAR_subnet_id` - A subnet ID from your AWS account (use the AWS CLI commands above)
+- `TF_VAR_run_tag` - Unique tag for this deployment; ensures all stacks share the same prefix (automatically set by the Blueprint)
 
 **Note:** The security group is now created automatically by the OpenTofu stack, so you don't need to specify one.
+
+> **Blueprint Note:**
+> If you use the Blueprint, `TF_VAR_run_tag` is set for you and all stacks will share the same unique prefix for isolation and collision avoidance.
 
 ### Finding Your Spacelift IDs
 

@@ -18,7 +18,9 @@ provider "aws" {
 
 provider "spacelift" {}
 
+# Remove random_string resource if run_tag is provided
 resource "random_string" "name_suffix" {
+  count   = var.run_tag == "" ? 1 : 0
   length  = 5
   upper   = false
   special = false
@@ -28,7 +30,8 @@ locals {
   name_prefix = (
     var.stack_prefix != "" ? "${var.stack_prefix}-" : ""
   )
-  unique_prefix = "${local.name_prefix}${random_string.name_suffix.result}-"
+  unique_tag = var.run_tag != "" ? var.run_tag : random_string.name_suffix[0].result
+  unique_prefix = "${local.name_prefix}${local.unique_tag}-"
   run_tag       = trimsuffix(local.unique_prefix, "-")
   bucket_name   = lower(replace(local.unique_prefix, "-", ""))
 }
@@ -37,7 +40,7 @@ module "stack_opentofu" {
   source = "spacelift.io/spacelift-solutions/stacks-module/spacelift"
 
   description     = "Stack that creates EC2 Servers"
-  name            = "${local.unique_prefix}Tofusible - OpenTofu"
+  name            = "${local.unique_prefix}TofusibleKube - OpenTofu"
   repository_name = "Quick-Cluster"
   space_id        = var.resource_space_id
 
@@ -96,7 +99,7 @@ module "stack_ansible" {
   source = "spacelift.io/spacelift-solutions/stacks-module/spacelift"
 
   description     = "Stack that configures EC2 servers"
-  name            = "${local.unique_prefix}Tofusible - Ansible"
+  name            = "${local.unique_prefix}TofusibleKube - Ansible"
   repository_name = "Quick-Cluster"
   space_id        = var.resource_space_id
 
@@ -197,7 +200,7 @@ resource "aws_s3_bucket" "kubeconfig_storage" {
   force_destroy = true
   
   tags = {
-    Name        = "Tofusible Kubeconfig Storage"
+    Name        = "TofusibleKube Kubeconfig Storage"
     Environment = "dev"
     Purpose     = "kubeconfig-storage"
   }
@@ -238,7 +241,7 @@ output "kubeconfig_s3_info" {
 
 
 resource "spacelift_stack" "tofusible-kubernetes" {
-  name         = "${local.unique_prefix}Tofusible - Kubernetes"
+  name         = "${local.unique_prefix}TofusibleKube - Kubernetes"
   space_id     = var.resource_space_id
   description  = "Stack that deploys hello world app to K3s cluster"
 

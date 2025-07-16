@@ -47,3 +47,9 @@ variable "repo_branch" {
   description = "Git branch in this repository to use for all child stacks."
   default     = "main"
 }
+
+variable "run_tag" {
+  type        = string
+  description = "Unique run tag for this deployment, supplied by the Blueprint."
+  default     = ""
+}

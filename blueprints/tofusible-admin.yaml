@@ -57,11 +57,17 @@ inputs:
     type: short_text
     default: "main"
 
+  - id: run_tag
+    name: Unique Run Tag
+    description: "Unique tag for this deployment (leave blank to auto-generate)"
+    type: short_text
+    default: ""
+
 options:
   trigger_run: true  # Automatically trigger a run after creation
 
 stack:
-  name: '${{ (inputs.stack_prefix != "" ? inputs.stack_prefix + "-" : "") + context.random_string + "-Tofusible-Admin" }}'
+  name: '${{ (inputs.stack_prefix != "" ? inputs.stack_prefix + "-" : "") + (inputs.run_tag != "" ? inputs.run_tag : context.random_string) + "-TofusibleKube-Admin" }}'
   space: ${{ inputs.resource_space_id }}
   administrative: true
   description: Admin stack that provisions OpenTofu, Ansible and Kubernetes stacks.
@@ -108,5 +114,7 @@ stack:
         value: ${{ inputs.stack_prefix }}
       - name: TF_VAR_repo_branch
         value: ${{ inputs.repo_branch }}
+      - name: TF_VAR_run_tag
+        value: '${{ inputs.run_tag != "" ? inputs.run_tag : context.random_string }}'
       - name: AWS_DEFAULT_REGION
         value: ${{ inputs.aws_default_region }} 
