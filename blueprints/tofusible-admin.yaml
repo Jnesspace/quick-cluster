@@ -61,7 +61,7 @@ options:
   trigger_run: true  # Automatically trigger a run after creation
 
 stack:
-  name: '${{ (inputs.stack_prefix != "" ? inputs.stack_prefix : context.random_string) + "-Tofusible-Admin" }}'
+  name: '${{ (inputs.stack_prefix != "" ? inputs.stack_prefix + "-" : "") + context.random_string + "-Tofusible-Admin" }}'
   space: ${{ inputs.resource_space_id }}
   administrative: true
   description: Admin stack that provisions OpenTofu, Ansible and Kubernetes stacks.

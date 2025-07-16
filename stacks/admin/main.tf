@@ -30,6 +30,7 @@ locals {
   )
   unique_prefix = "${local.name_prefix}${random_string.name_suffix.result}-"
   run_tag       = trimsuffix(local.unique_prefix, "-")
+  bucket_name   = lower(replace(local.unique_prefix, "-", ""))
 }
 
 module "stack_opentofu" {
@@ -116,7 +117,7 @@ module "stack_ansible" {
     
     # S3 bucket for kubeconfig storage
     KUBECONFIG_S3_BUCKET = {
-      value     = aws_s3_bucket.kubeconfig_storage.bucket
+      value     = local.bucket_name
       sensitive = false
     }
     
@@ -190,7 +191,7 @@ module "stack_ansible" {
 
 # S3 bucket for storing kubeconfig
 resource "aws_s3_bucket" "kubeconfig_storage" {
-  bucket = "tofusible-kubeconfig-${random_id.bucket_suffix.hex}"
+  bucket = local.bucket_name
   
   tags = {
     Name        = "Tofusible Kubeconfig Storage"
@@ -265,7 +266,7 @@ resource "spacelift_aws_integration_attachment" "kubernetes" {
 resource "spacelift_environment_variable" "kubernetes_s3_bucket" {
   stack_id = spacelift_stack.tofusible-kubernetes.id
   name     = "KUBECONFIG_S3_BUCKET"
-  value    = aws_s3_bucket.kubeconfig_storage.bucket
+  value    = local.bucket_name
 }
 
 resource "spacelift_environment_variable" "kubernetes_aws_region" {
