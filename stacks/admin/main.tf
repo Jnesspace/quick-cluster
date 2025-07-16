@@ -291,7 +291,7 @@ resource "spacelift_context" "kubeconfig_hooks" {
   name        = "${local.unique_prefix}kubeconfig-hooks"
   description = "Downloads the K3s kubeconfig before init and apply"
 
-  labels = ["tofusible", "autoattach:${local.run_tag}"]
+  labels = ["autoattach:${local.run_tag}"]
 
   # Runs before terraform init / kubernetes init
   before_init = [
