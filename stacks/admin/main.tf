@@ -52,15 +52,15 @@ module "stack_opentofu" {
   }
 
   environment_variables = {
-    # We pass this to the OpenTofu stack so it can be used in the inventory
-    TF_VAR_private_key_path = {
-      value     = local.private_key_full_path
+    # Pass the user-provided SSH key name to EC2 instances
+    TF_VAR_aws_private_key_name = {
+      value     = var.ssh_key_name
       sensitive = false
     }
 
-    # We pass this to the OpenTofu stack so it can be used in the aws ec2 instances
-    TF_VAR_aws_private_key_name = {
-      value     = aws_key_pair.this.key_name
+    # Pass the constructed private key path to OpenTofu stack  
+    TF_VAR_private_key_path = {
+      value     = "/mnt/workspace/${var.ssh_key_name}.pem"
       sensitive = false
     }
 
@@ -84,10 +84,6 @@ module "stack_opentofu" {
       value     = var.aws_default_region
       sensitive = false
     }
-  }
-
-  contexts = {
-    tofusible_ssh_key = spacelift_context.ssh_keys.id
   }
 
   labels            = ["${local.run_tag}-opentofu"]
@@ -130,11 +126,6 @@ module "stack_ansible" {
     }
   }
 
-  contexts = {
-    # We attach the ssh key to the stack so ansible can use it to connect to the servers
-    tofusible_ssh_key = spacelift_context.ssh_keys.id
-  }
-
   labels            = ["${local.run_tag}-ansible"]
   project_root      = "stacks/ansible"
   repository_branch = var.repo_branch
@@ -144,24 +135,9 @@ module "stack_ansible" {
 
   hooks = {
     before = {
-      # !IMPORTANT
-      # WE *must* chmod the tofusible.yml and private key files for ansible to use them.
-      init  = ["chmod 644 tofusible.yml", "chmod 600 ${local.private_key_full_path}", "chown spacelift:spacelift ${local.private_key_full_path}"]
-      apply = ["chmod 644 tofusible.yml", "chmod 600 ${local.private_key_full_path}", "chown spacelift:spacelift ${local.private_key_full_path}"]
-    }
-    
-    after = {
-      apply = [
-        "echo '🔍 Checking for kubeconfig files...'",
-        "ls -la /tmp/kubeconfig* || echo 'No kubeconfig files found'",
-        "echo '📄 Contents of kubeconfig if found:'",
-        "test -f /tmp/kubeconfig-ready.yaml && head -20 /tmp/kubeconfig-ready.yaml || echo 'No kubeconfig to display'",
-        "test -f /tmp/kubeconfig-ready.yaml && echo '✅ Found kubeconfig, uploading to S3...' || echo '❌ Kubeconfig not found'",
-        "test -f /tmp/kubeconfig-ready.yaml && aws s3 cp /tmp/kubeconfig-ready.yaml s3://$KUBECONFIG_S3_BUCKET/kubeconfig-$(date +%Y%m%d-%H%M%S).yaml && echo '📤 Timestamped version uploaded' || true",
-        "test -f /tmp/kubeconfig-ready.yaml && aws s3 cp /tmp/kubeconfig-ready.yaml s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml && echo '📤 Latest version uploaded' || true",
-        "test -f /tmp/kubeconfig-ready.yaml && echo '🎉 Kubeconfig available at: s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml' || echo '⚠️ Kubeconfig upload skipped'",
-        "test -f /tmp/kubeconfig-ready.yaml && echo '💾 Download with: aws s3 cp s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml ~/.kube/config' || true"
-      ]
+      # Set proper permissions on user-provided SSH key
+      init  = ["chmod 644 tofusible.yml", "chmod 600 /mnt/workspace/${var.ssh_key_name}.pem", "chown spacelift:spacelift /mnt/workspace/${var.ssh_key_name}.pem"]
+      apply = ["chmod 644 tofusible.yml", "chmod 600 /mnt/workspace/${var.ssh_key_name}.pem", "chown spacelift:spacelift /mnt/workspace/${var.ssh_key_name}.pem"]
     }
   }
 

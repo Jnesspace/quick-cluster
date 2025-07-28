@@ -44,8 +44,13 @@ variable "stack_prefix" {
 
 variable "repo_branch" {
   type        = string
-  description = "Git branch in this repository to use for all child stacks."
+  description = "The branch to use for the repository"
   default     = "main"
+}
+
+variable "ssh_key_name" {
+  type        = string
+  description = "Name of existing AWS EC2 Key Pair for SSH access to instances"
 }
 
 variable "run_tag" {
