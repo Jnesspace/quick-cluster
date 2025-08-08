@@ -302,6 +302,9 @@ resource "spacelift_context" "kubeconfig_hooks" {
     # ensure .kube dir exists
     "mkdir -p /mnt/workspace/.kube",
 
+    # wait for kubeconfig to be uploaded by Ansible (handles timing/race)
+    "until aws s3api head-object --bucket $KUBECONFIG_S3_BUCKET --key kubeconfig-latest.yaml >/dev/null 2>&1; do echo '⏳ Waiting for kubeconfig in s3://$KUBECONFIG_S3_BUCKET...'; sleep 10; done",
+
     # pull the latest kubeconfig
     "aws s3 cp s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml /mnt/workspace/.kube/config",
 
@@ -316,6 +319,7 @@ resource "spacelift_context" "kubeconfig_hooks" {
   # Runs before terraform apply / kubernetes apply
   before_apply = [
     "mkdir -p /mnt/workspace/.kube",
+    "until aws s3api head-object --bucket $KUBECONFIG_S3_BUCKET --key kubeconfig-latest.yaml >/dev/null 2>&1; do echo '⏳ Waiting for kubeconfig in s3://$KUBECONFIG_S3_BUCKET...'; sleep 10; done",
     "aws s3 cp s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml /mnt/workspace/.kube/config",
     "chmod 600 /mnt/workspace/.kube/config",
     "echo '📥 Downloaded kubeconfig from S3:'",
