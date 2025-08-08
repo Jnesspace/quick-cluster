@@ -70,11 +70,6 @@ module "stack_opentofu" {
       sensitive = false
     }
 
-    TF_VAR_create_new_subnet = {
-      value     = tostring(var.create_new_subnet)
-      sensitive = false
-    }
-
     TF_VAR_instance_type = {
       value     = var.instance_type
       sensitive = false

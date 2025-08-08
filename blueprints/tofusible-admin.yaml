@@ -9,21 +9,13 @@ inputs:
     description: "Spacelift Space ID used by the OpenTofu, Ansible and Kubernetes stacks that this admin stack creates"
     type: short_text
     default: "test-01K09P35SJAB2S1C856MEGPJZX"
-  - id: subnet_mode
-    name: Subnet Mode
-    description: "Choose whether to create a new subnet or use an existing one"
-    type: select
-    options:
-      - create_new
-      - use_existing
-    default: use_existing
   - id: subnet_id
-    name: AWS Subnet ID (only if Subnet Mode = use_existing)
-    description: "Paste an existing subnet identifier like subnet-0abc1234. Leave blank when Subnet Mode is create_new."
+    name: AWS Subnet ID
+    description: "Paste an existing subnet identifier like subnet-0abc1234"
     type: short_text
     validations:
       pattern: "^subnet-[0-9a-fA-F]+$"
-      required: false
+      required: true
   - id: aws_default_region
     name: AWS Region
     description: "AWS region (e.g., eu-west-1)"
@@ -101,13 +93,11 @@ stack:
       - name: TF_VAR_resource_space_id
         value: ${{ inputs.resource_space_id }}
       - name: TF_VAR_subnet_id
-        value: '${{ inputs.subnet_mode == "use_existing" ? inputs.subnet_id : "" }}'
+        value: ${{ inputs.subnet_id }}
       - name: TF_VAR_aws_default_region
         value: ${{ inputs.aws_default_region }}
       - name: TF_VAR_ansible_worker_pool_id
         value: ${{ inputs.ansible_worker_pool_id }}
-      - name: TF_VAR_create_new_subnet
-        value: '${{ inputs.subnet_mode == "create_new" ? "true" : "false" }}'
       - name: TF_VAR_instance_type
         value: ${{ inputs.instance_type }}
       - name: TF_VAR_stack_prefix

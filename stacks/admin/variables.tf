@@ -24,11 +24,7 @@ variable "aws_default_region" {
   description = "The default region to use for the AWS provider."
 }
 
-variable "create_new_subnet" {
-  type        = bool
-  description = "Whether to create a new subnet automatically for the OpenTofu stack."
-  default     = false
-}
+// NOTE: create_new_subnet is deprecated/unused. Always use existing subnet via var.subnet_id.
 
 variable "instance_type" {
   type        = string
