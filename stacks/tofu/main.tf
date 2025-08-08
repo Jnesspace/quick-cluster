@@ -19,11 +19,8 @@ variable "private_key_path" {
   description = "The path to the private key to use for SSH"
 }
 
-variable "create_new_subnet" {
-  type        = bool
-  description = "Whether to create a new public subnet automatically. If true, var.subnet_id is ignored."
-  default     = false
-}
+// NOTE: subnet creation is disabled. This stack will auto-select a default subnet
+// in the default VPC when `var.subnet_id` is not provided.
 
 variable "instance_type" {
   type        = string
@@ -39,70 +36,34 @@ variable "subnet_id" {
 
 provider "aws" {}
 
-# --- Networking: support both existing subnet and fully isolated new VPC ------
-# 1) When create_new_subnet=false → use existing subnet_id in the default VPC
-# 2) When create_new_subnet=true  → create an isolated VPC (10.200.0.0/16) with
-#    an Internet Gateway, public route table, and a new public /24 subnet
-
-# Look up default VPC for the "use_existing" path
+# --- Networking: use provided subnet if given, else pick a default subnet ------
+# Look up default VPC (used when no subnet_id is provided)
 data "aws_vpc" "default" {
   default = true
 }
 
-# Create a dedicated VPC when user requests a new subnet
-resource "aws_vpc" "generated" {
-  count                = var.create_new_subnet ? 1 : 0
-  cidr_block           = "10.200.0.0/16"
-  enable_dns_support   = true
-  enable_dns_hostnames = true
-
-  tags = {
-    Name = "tofusible-generated"
+# Discover default subnets in the default VPC (one per AZ). We'll pick the first.
+data "aws_subnets" "default_vpc" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
+  filter {
+    name   = "default-for-az"
+    values = ["true"]
   }
 }
 
-# Internet gateway for the generated VPC
-resource "aws_internet_gateway" "generated" {
-  count  = var.create_new_subnet ? 1 : 0
-  vpc_id = aws_vpc.generated[0].id
-
-  tags = {
-    Name = "tofusible-generated"
-  }
+# If a specific subnet_id is provided, fetch its details
+data "aws_subnet" "selected" {
+  count = var.subnet_id != null && var.subnet_id != "" ? 1 : 0
+  id    = var.subnet_id
 }
 
-# Public route table with default route to the Internet Gateway
-resource "aws_route_table" "public" {
-  count  = var.create_new_subnet ? 1 : 0
-  vpc_id = aws_vpc.generated[0].id
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.generated[0].id
-  }
-
-  tags = {
-    Name = "tofusible-public"
-  }
-}
-
-# New public subnet inside the generated VPC
-resource "aws_subnet" "generated" {
-  count                   = var.create_new_subnet ? 1 : 0
-  vpc_id                  = aws_vpc.generated[0].id
-  cidr_block              = "10.200.0.0/24"
-  map_public_ip_on_launch = true
-
-  tags = {
-    Name = "tofusible-generated"
-  }
-}
-
-# Associate the public route table with the generated subnet
-resource "aws_route_table_association" "generated_public" {
-  count          = var.create_new_subnet ? 1 : 0
-  subnet_id      = aws_subnet.generated[0].id
-  route_table_id = aws_route_table.public[0].id
+# If no subnet_id is provided, fetch the details of the first default subnet
+data "aws_subnet" "default_selected" {
+  count = var.subnet_id == null || var.subnet_id == "" ? 1 : 0
+  id    = element(data.aws_subnets.default_vpc.ids, 0)
 }
 # -----------------------------------------------------------------------------
 
@@ -194,14 +155,14 @@ resource "aws_security_group" "tofusible_sg" {
 }
 
 # Query AWS for subnet information
-data "aws_subnet" "selected" {
-  count = var.create_new_subnet ? 0 : 1
-  id    = var.subnet_id
-}
-
 locals {
-  subnet_id_final = var.create_new_subnet ? aws_subnet.generated[0].id : var.subnet_id
-  vpc_id_final    = var.create_new_subnet ? aws_vpc.generated[0].id : element(data.aws_subnet.selected.*.vpc_id, 0)
+  subnet_id_final = (
+    var.subnet_id != null && var.subnet_id != ""
+  ) ? var.subnet_id : element(data.aws_subnets.default_vpc.ids, 0)
+
+  vpc_id_final = (
+    var.subnet_id != null && var.subnet_id != ""
+  ) ? element(data.aws_subnet.selected.*.vpc_id, 0) : data.aws_vpc.default.id
 }
 
 # Query AWS for availability zone information
@@ -359,10 +320,16 @@ output "inventory_tofu" {
 output "aws_info" {
   value = {
     vpc_id              = local.vpc_id_final
-    vpc_cidr_block      = var.create_new_subnet ? aws_vpc.generated[0].cidr_block : data.aws_subnet.selected[0].cidr_block
+    vpc_cidr_block      = (
+      var.subnet_id != null && var.subnet_id != ""
+    ) ? data.aws_subnet.selected[0].cidr_block : data.aws_subnet.default_selected[0].cidr_block
     subnet_id           = local.subnet_id_final
-    subnet_cidr_block   = var.create_new_subnet ? aws_subnet.generated[0].cidr_block : data.aws_subnet.selected[0].cidr_block
-    availability_zone   = var.create_new_subnet ? aws_subnet.generated[0].availability_zone : data.aws_subnet.selected[0].availability_zone
+    subnet_cidr_block   = (
+      var.subnet_id != null && var.subnet_id != ""
+    ) ? data.aws_subnet.selected[0].cidr_block : data.aws_subnet.default_selected[0].cidr_block
+    availability_zone   = (
+      var.subnet_id != null && var.subnet_id != ""
+    ) ? data.aws_subnet.selected[0].availability_zone : data.aws_subnet.default_selected[0].availability_zone
     security_group_id   = aws_security_group.tofusible_sg.id
     security_group_name = aws_security_group.tofusible_sg.name
     ami_id              = data.aws_ami.this.id

@@ -64,7 +64,7 @@ module "stack_opentofu" {
       sensitive = false
     }
 
-    # This is the subnet where the instances will be created
+    # This is the subnet where the instances will be created (optional)
     TF_VAR_subnet_id = {
       value     = var.subnet_id
       sensitive = false

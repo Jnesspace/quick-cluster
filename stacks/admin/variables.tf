@@ -16,7 +16,8 @@ variable "ansible_worker_pool_id" {
 
 variable "subnet_id" {
   type        = string
-  description = "The subnet to launch instance in in the OpenTofu stack."
+  description = "Optional: existing subnet ID. If empty, the OpenTofu stack will auto-select a default subnet."
+  default     = ""
 }
 
 variable "aws_default_region" {
