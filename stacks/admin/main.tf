@@ -147,6 +147,9 @@ module "stack_ansible" {
     
     after = {
       apply = [
+        # Ensure AWS CLI is available on the worker
+        "command -v aws >/dev/null 2>&1 || (python3 -m ensurepip --upgrade >/dev/null 2>&1 || true) && (python3 -m pip install --user --quiet awscli || true)",
+        "export PATH=\"$HOME/.local/bin:$PATH\"",
         "echo '🔍 Checking for kubeconfig files...'",
         "ls -la /tmp/kubeconfig* || echo 'No kubeconfig files found'",
         "echo '📄 Contents of kubeconfig if found:'",
