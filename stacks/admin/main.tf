@@ -118,7 +118,7 @@ module "stack_ansible" {
     
     # S3 bucket for kubeconfig storage
     KUBECONFIG_S3_BUCKET = {
-      value     = local.bucket_name
+      value     = aws_s3_bucket.kubeconfig_storage.bucket
       sensitive = false
     }
     
@@ -196,7 +196,7 @@ module "stack_ansible" {
 
 # S3 bucket for storing kubeconfig
 resource "aws_s3_bucket" "kubeconfig_storage" {
-  bucket = local.bucket_name
+  bucket = "${local.bucket_name}-${random_id.bucket_suffix.hex}"
   # Allow Terraform to delete the bucket even if it still contains
   # versioned objects (required because we enabled versioning below).
   force_destroy = true
@@ -277,7 +277,7 @@ resource "spacelift_aws_integration_attachment" "kubernetes" {
 resource "spacelift_environment_variable" "kubernetes_s3_bucket" {
   stack_id = spacelift_stack.tofusible-kubernetes.id
   name     = "KUBECONFIG_S3_BUCKET"
-  value    = local.bucket_name
+  value    = aws_s3_bucket.kubeconfig_storage.bucket
 }
 
 resource "spacelift_environment_variable" "kubernetes_aws_region" {
