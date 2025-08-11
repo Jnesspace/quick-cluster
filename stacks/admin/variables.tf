@@ -8,11 +8,13 @@ variable "resource_space_id" {
   description = "The Space ID to use for created resources."
 }
 
-variable "ansible_worker_pool_id" {
+
+variable "worker_pool_id" {
   type        = string
-  description = "The worker pool ID to use for ansible jobs."
-  default     = null  # Use public worker pool
+  description = "Optional default worker pool ID to use for Admin, OpenTofu and Kubernetes stacks."
+  default     = null
 }
+
 
 variable "subnet_id" {
   type        = string

@@ -13,11 +13,14 @@ inputs:
     name: AWS Region
     description: "AWS region (e.g., eu-west-1)"
     type: short_text
-  - id: ansible_worker_pool_id
-    name: Ansible Worker Pool ID (optional)
-    description: "Worker pool ID for Ansible runs; leave empty to use public worker pool"
+
+
+  - id: worker_pool_id
+    name: Worker Pool ID for All Stacks (optional)
+    description: "Worker pool ID to use for Admin, OpenTofu and Kubernetes stacks; leave empty to use public worker pool"
     type: short_text
     default: ""
+
 
 
   - id: instance_type
@@ -87,8 +90,8 @@ stack:
         value: ${{ inputs.resource_space_id }}
       - name: TF_VAR_aws_default_region
         value: ${{ inputs.aws_default_region }}
-      - name: TF_VAR_ansible_worker_pool_id
-        value: ${{ inputs.ansible_worker_pool_id }}
+      - name: TF_VAR_worker_pool_id
+        value: ${{ inputs.worker_pool_id }}
       - name: TF_VAR_instance_type
         value: ${{ inputs.instance_type }}
       - name: TF_VAR_stack_prefix

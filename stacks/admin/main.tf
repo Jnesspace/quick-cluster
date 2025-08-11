@@ -88,6 +88,9 @@ module "stack_opentofu" {
   labels            = ["${local.run_tag}-opentofu"]
   project_root      = "stacks/tofu"
   repository_branch = var.repo_branch
+
+  # Use default worker pool for OpenTofu stack if provided
+  worker_pool_id = var.worker_pool_id
 }
 
 module "stack_ansible" {
@@ -163,7 +166,8 @@ module "stack_ansible" {
     }
   }
 
-  worker_pool_id = var.ansible_worker_pool_id
+  # Use default worker pool for Ansible stack
+  worker_pool_id = var.worker_pool_id
 
   dependencies = {
     # Pass the inventory from the OpenTofu stack to the Ansible stack
@@ -254,6 +258,9 @@ resource "spacelift_stack" "tofusible-kubernetes" {
   labels = ["${local.run_tag}-kubernetes"]
   enable_well_known_secret_masking = true
   github_action_deploy = false
+
+  # Use default worker pool for Kubernetes stack if provided
+  worker_pool_id = var.worker_pool_id
 
   # Remove the hooks block here, as hooks are now managed by spacelift_hook resources
 }
