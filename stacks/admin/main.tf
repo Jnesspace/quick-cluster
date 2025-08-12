@@ -64,14 +64,9 @@ module "stack_opentofu" {
       sensitive = false
     }
 
-    # This is the subnet where the instances will be created
+    # This is the subnet where the instances will be created (optional)
     TF_VAR_subnet_id = {
       value     = var.subnet_id
-      sensitive = false
-    }
-
-    TF_VAR_create_new_subnet = {
-      value     = tostring(var.create_new_subnet)
       sensitive = false
     }
 
@@ -93,6 +88,9 @@ module "stack_opentofu" {
   labels            = ["${local.run_tag}-opentofu"]
   project_root      = "stacks/tofu"
   repository_branch = var.repo_branch
+
+  # Use default worker pool for OpenTofu stack if provided
+  worker_pool_id = var.worker_pool_id
 }
 
 module "stack_ansible" {
@@ -120,7 +118,7 @@ module "stack_ansible" {
     
     # S3 bucket for kubeconfig storage
     KUBECONFIG_S3_BUCKET = {
-      value     = local.bucket_name
+      value     = aws_s3_bucket.kubeconfig_storage.bucket
       sensitive = false
     }
     
@@ -152,6 +150,9 @@ module "stack_ansible" {
     
     after = {
       apply = [
+        # Ensure AWS CLI is available on the worker
+        "command -v aws >/dev/null 2>&1 || (python3 -m ensurepip --upgrade >/dev/null 2>&1 || true) && (python3 -m pip install --user --quiet awscli || true)",
+        "export PATH=\"$HOME/.local/bin:$PATH\"",
         "echo '🔍 Checking for kubeconfig files...'",
         "ls -la /tmp/kubeconfig* || echo 'No kubeconfig files found'",
         "echo '📄 Contents of kubeconfig if found:'",
@@ -165,7 +166,8 @@ module "stack_ansible" {
     }
   }
 
-  worker_pool_id = var.ansible_worker_pool_id
+  # Use default worker pool for Ansible stack
+  worker_pool_id = var.worker_pool_id
 
   dependencies = {
     # Pass the inventory from the OpenTofu stack to the Ansible stack
@@ -194,7 +196,7 @@ module "stack_ansible" {
 
 # S3 bucket for storing kubeconfig
 resource "aws_s3_bucket" "kubeconfig_storage" {
-  bucket = local.bucket_name
+  bucket = "${local.bucket_name}-${random_id.bucket_suffix.hex}"
   # Allow Terraform to delete the bucket even if it still contains
   # versioned objects (required because we enabled versioning below).
   force_destroy = true
@@ -257,6 +259,9 @@ resource "spacelift_stack" "tofusible-kubernetes" {
   enable_well_known_secret_masking = true
   github_action_deploy = false
 
+  # Use default worker pool for Kubernetes stack if provided
+  worker_pool_id = var.worker_pool_id
+
   # Remove the hooks block here, as hooks are now managed by spacelift_hook resources
 }
 
@@ -272,7 +277,7 @@ resource "spacelift_aws_integration_attachment" "kubernetes" {
 resource "spacelift_environment_variable" "kubernetes_s3_bucket" {
   stack_id = spacelift_stack.tofusible-kubernetes.id
   name     = "KUBECONFIG_S3_BUCKET"
-  value    = local.bucket_name
+  value    = aws_s3_bucket.kubeconfig_storage.bucket
 }
 
 resource "spacelift_environment_variable" "kubernetes_aws_region" {
@@ -307,6 +312,9 @@ resource "spacelift_context" "kubeconfig_hooks" {
     # ensure .kube dir exists
     "mkdir -p /mnt/workspace/.kube",
 
+    # wait for kubeconfig to be uploaded by Ansible (handles timing/race)
+    "until aws s3api head-object --bucket $KUBECONFIG_S3_BUCKET --key kubeconfig-latest.yaml >/dev/null 2>&1; do echo '⏳ Waiting for kubeconfig in s3://$KUBECONFIG_S3_BUCKET...'; sleep 10; done",
+
     # pull the latest kubeconfig
     "aws s3 cp s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml /mnt/workspace/.kube/config",
 
@@ -321,6 +329,7 @@ resource "spacelift_context" "kubeconfig_hooks" {
   # Runs before terraform apply / kubernetes apply
   before_apply = [
     "mkdir -p /mnt/workspace/.kube",
+    "until aws s3api head-object --bucket $KUBECONFIG_S3_BUCKET --key kubeconfig-latest.yaml >/dev/null 2>&1; do echo '⏳ Waiting for kubeconfig in s3://$KUBECONFIG_S3_BUCKET...'; sleep 10; done",
     "aws s3 cp s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml /mnt/workspace/.kube/config",
     "chmod 600 /mnt/workspace/.kube/config",
     "echo '📥 Downloaded kubeconfig from S3:'",

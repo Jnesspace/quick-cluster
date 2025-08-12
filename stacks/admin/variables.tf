@@ -8,15 +8,18 @@ variable "resource_space_id" {
   description = "The Space ID to use for created resources."
 }
 
-variable "ansible_worker_pool_id" {
+
+variable "worker_pool_id" {
   type        = string
-  description = "The worker pool ID to use for ansible jobs."
-  default     = null  # Use public worker pool
+  description = "Optional default worker pool ID to use for Admin, OpenTofu and Kubernetes stacks."
+  default     = null
 }
+
 
 variable "subnet_id" {
   type        = string
-  description = "The subnet to launch instance in in the OpenTofu stack."
+  description = "Optional: existing subnet ID. If empty, the OpenTofu stack will auto-select a default subnet."
+  default     = ""
 }
 
 variable "aws_default_region" {
@@ -24,11 +27,7 @@ variable "aws_default_region" {
   description = "The default region to use for the AWS provider."
 }
 
-variable "create_new_subnet" {
-  type        = bool
-  description = "Whether to create a new subnet automatically for the OpenTofu stack."
-  default     = false
-}
+// NOTE: create_new_subnet is deprecated/unused. Always use existing subnet via var.subnet_id.
 
 variable "instance_type" {
   type        = string
