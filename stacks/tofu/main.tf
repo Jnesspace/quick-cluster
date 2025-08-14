@@ -313,8 +313,7 @@ output "inventory_tofu" {
     module.host_tofu_dev_2.spec,
     module.host_tofu_dev_3.spec
   ]
-  # Temporarily set to false for debugging - contains hostnames and SSH info but no passwords
-  sensitive = false
+  sensitive = true
 }
 
 # Output AWS information for reference
