@@ -41,7 +41,7 @@ module "stack_opentofu" {
 
   description     = "Stack that creates EC2 Servers"
   name            = "${local.unique_prefix}TofusibleKube - OpenTofu"
-  repository_name = "Quick-Cluster"
+  repository_name = "Quick-Cluster"  #UPDATE_TO_YOUR_VALUE
   space_id        = var.resource_space_id
 
   auto_deploy = true
@@ -98,7 +98,7 @@ module "stack_ansible" {
 
   description     = "Stack that configures EC2 servers"
   name            = "${local.unique_prefix}TofusibleKube - Ansible"
-  repository_name = "Quick-Cluster"
+  repository_name = "Quick-Cluster"  #UPDATE_TO_YOUR_VALUE
   space_id        = var.resource_space_id
 
   auto_deploy = true
@@ -247,7 +247,7 @@ resource "spacelift_stack" "tofusible-kubernetes" {
   space_id     = var.resource_space_id
   description  = "Stack that deploys hello world app to K3s cluster"
 
-  repository   = "Quick-Cluster"
+  repository   = "Quick-Cluster"  #UPDATE_TO_YOUR_VALUE
   branch       = var.repo_branch
   project_root = "stacks/kubernetes"
 
