@@ -1,13 +1,17 @@
-# The OpenTofu Stack
+# OpenTofu Stack
 
-This stack creates the virtual machines in OpenTofu and then generates an output that the Ansible stack can use to configure the virtual machines.
+This stack provisions EC2 instances and emits normalized inventory data for the Ansible stack.
 
-## How It Works
+## Function
 
-1. We create the virtual machines in OpenTofu using the `aws_ec2_instance` resource.
-2. We use the `tofusible_host` module to gather information about the virtual machines we created.
-3. We output the `tofusible_host`s as a list of hosts in OpenTofu (using native OpenTofu outputs).
+- Provision EC2 instances using OpenTofu
+- Normalize host data via the `tofusible_host` module
+- Output inventory in a structure consumable by the Ansible dynamic inventory
 
-Check out the readme in `modules/tofusible_host` to learn more about the module and how to configure it.
+## Flow
 
-Take a look at the OpenTofu code for more details.
+1. Create EC2 instances.
+2. Use `tofusible_host` for each provisioned instance to emit group membership and attributes.
+3. Expose the aggregated hosts as outputs for the Ansible stack.
+
+See `modules/tofusible_host/README.md` for details on host normalization.

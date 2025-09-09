@@ -18,7 +18,7 @@ provider "aws" {
 
 provider "spacelift" {}
 
-# Remove random_string resource if run_tag is provided
+# Generate random string for run_tag if not provided
 resource "random_string" "name_suffix" {
   count   = var.run_tag == "" ? 1 : 0
   length  = 5
@@ -26,10 +26,19 @@ resource "random_string" "name_suffix" {
   special = false
 }
 
+# Generate random string for prefix if not provided
+resource "random_string" "prefix_suffix" {
+  count   = var.stack_prefix == "" ? 1 : 0
+  length  = 6
+  upper   = false
+  special = false
+}
+
 locals {
-  name_prefix = (
-    var.stack_prefix != "" ? "${var.stack_prefix}-" : ""
-  )
+  # Auto-generate prefix if not provided
+  auto_prefix = var.stack_prefix != "" ? var.stack_prefix : "tofusible-${random_string.prefix_suffix[0].result}"
+  name_prefix = "${local.auto_prefix}-"
+  
   unique_tag = var.run_tag != "" ? var.run_tag : random_string.name_suffix[0].result
   unique_prefix = "${local.name_prefix}${local.unique_tag}-"
   run_tag       = trimsuffix(local.unique_prefix, "-")
@@ -41,7 +50,7 @@ module "stack_opentofu" {
 
   description     = "Stack that creates EC2 Servers"
   name            = "${local.unique_prefix}TofusibleKube - OpenTofu"
-  repository_name = "Quick-Cluster"
+  repository_name = "Quick-Cluster"  #UPDATE_TO_YOUR_VALUE
   space_id        = var.resource_space_id
 
   auto_deploy = true
@@ -98,7 +107,7 @@ module "stack_ansible" {
 
   description     = "Stack that configures EC2 servers"
   name            = "${local.unique_prefix}TofusibleKube - Ansible"
-  repository_name = "Quick-Cluster"
+  repository_name = "Quick-Cluster"  #UPDATE_TO_YOUR_VALUE
   space_id        = var.resource_space_id
 
   auto_deploy = true
@@ -175,10 +184,8 @@ module "stack_ansible" {
       parent_stack_id = module.stack_opentofu.id
 
       references = {
-        # NOTE: This output is *sensitive* as it could hold passwords
-        # If you want to use this on a private worker you *MUST* enable sensitive output uploading.
-        # This example utilizes a public worker to create the output (see the stack_tofu above)
-        # and public workers do not require that setting.
+        # NOTE: This output contains SSH hostnames and user info but no passwords
+        # Currently set to non-sensitive for debugging purposes
         # See more: https://docs.spacelift.io/concepts/stack/stack-dependencies#enabling-sensitive-outputs-for-references
         INVENTORY = {
           trigger_always = true
@@ -247,7 +254,7 @@ resource "spacelift_stack" "tofusible-kubernetes" {
   space_id     = var.resource_space_id
   description  = "Stack that deploys hello world app to K3s cluster"
 
-  repository   = "Quick-Cluster"
+  repository   = "Quick-Cluster"  #UPDATE_TO_YOUR_VALUE
   branch       = var.repo_branch
   project_root = "stacks/kubernetes"
 

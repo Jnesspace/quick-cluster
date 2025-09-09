@@ -3,12 +3,12 @@ inputs:
     name: AWS Integration ID
     description: "ID of the AWS integration to attach to the stack"
     type: short_text
-    default: "01JV4YKENC7KXV3MNBYPSH88AX"  # jakespace
+    default: "01JV4YKENC7KXV3MNBYPSH88AX"  # jakespace #UPDATE_TO_YOUR_VALUE
   - id: resource_space_id
     name: Space ID for Child Resources
     description: "Spacelift Space ID used by the OpenTofu, Ansible and Kubernetes stacks that this admin stack creates"
     type: short_text
-    default: "test-01K09P35SJAB2S1C856MEGPJZX"
+    default: "test-01K09P35SJAB2S1C856MEGPJZX"  #UPDATE_TO_YOUR_VALUE
   - id: aws_default_region
     name: AWS Region
     description: "AWS region (e.g., eu-west-1)"
@@ -66,7 +66,7 @@ stack:
   auto_deploy: true
   vcs:
     branch: ${{ inputs.repo_branch }}
-    repository: Quick-Cluster
+    repository: Quick-Cluster  #UPDATE_TO_YOUR_VALUE
     provider: GITHUB
     project_root: stacks/admin
   vendor:

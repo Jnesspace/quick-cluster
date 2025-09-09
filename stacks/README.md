@@ -1,8 +1,10 @@
-# The Stacks
+# Stacks Overview
 
-Browse each stack to see what it does and how it works.
+This directory contains the stacks that compose the Quick-Cluster workflow.
 
-- `admin` - The Spacelift admin stack that sets up the OpenTofu and Ansible stacks as well as creates the stack dependency between them.
-- `tofu` - The OpenTofu stack that creates the virtual machines.
-- `ansible` - The Ansible stack that configures the virtual machines.
-    - This directory also has an `inventory_plugins` directory that contains the `tofusible.py` dynamic inventory plugin.
+- `admin`: Administrative stack that orchestrates child stacks and shared resources
+- `tofu`: OpenTofu stack that provisions EC2 instances
+- `ansible`: Ansible stack that installs and configures the K3s cluster
+- `kubernetes`: Kubernetes example workload applied to the cluster
+
+Refer to each subdirectory README for usage and configuration details.
