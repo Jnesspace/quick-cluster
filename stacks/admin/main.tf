@@ -195,6 +195,7 @@ module "stack_ansible" {
           # It tells the dynamic inventory where to get information about the hosts
           # Created in OpenTofu
           input_name = "TOFUSIBLE_INVENTORY"
+          read_sensitive = true
         }
       }
     }
