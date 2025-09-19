@@ -49,7 +49,7 @@ module "stack_opentofu" {
   source = "spacelift.io/spacelift-solutions/stacks-module/spacelift"
 
   description     = "Stack that creates EC2 Servers"
-  name            = "${local.unique_prefix}TofusibleKube - OpenTofu"
+  name            = "${local.unique_prefix}TofusibleKube-OpenTofu"
   repository_name = "Quick-Cluster"  #UPDATE_TO_YOUR_VALUE
   space_id        = var.resource_space_id
 
@@ -106,7 +106,7 @@ module "stack_ansible" {
   source = "spacelift.io/spacelift-solutions/stacks-module/spacelift"
 
   description     = "Stack that configures EC2 servers"
-  name            = "${local.unique_prefix}TofusibleKube - Ansible"
+  name            = "${local.unique_prefix}TofusibleKube-Ansible"
   repository_name = "Quick-Cluster"  #UPDATE_TO_YOUR_VALUE
   space_id        = var.resource_space_id
 
@@ -250,7 +250,7 @@ output "kubeconfig_s3_info" {
 
 
 resource "spacelift_stack" "tofusible-kubernetes" {
-  name         = "${local.unique_prefix}TofusibleKube - Kubernetes"
+  name         = "${local.unique_prefix}TofusibleKube-Kubernetes"
   space_id     = var.resource_space_id
   description  = "Stack that deploys hello world app to K3s cluster"
 
