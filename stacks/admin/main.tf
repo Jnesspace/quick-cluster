@@ -177,29 +177,21 @@ module "stack_ansible" {
 
   # Use default worker pool for Ansible stack
   worker_pool_id = var.worker_pool_id
+}
 
-  dependencies = {
-    # Pass the inventory from the OpenTofu stack to the Ansible stack
-    TOFUSIBLE = {
-      parent_stack_id = module.stack_opentofu.id
+# Stack dependency: Ansible stack depends on OpenTofu stack
+resource "spacelift_stack_dependency" "ansible_depends_on_opentofu" {
+  stack_id            = module.stack_ansible.id
+  depends_on_stack_id = module.stack_opentofu.id
+}
 
-      references = {
-        # NOTE: This output contains SSH hostnames and user info but no passwords
-        # Currently set to non-sensitive for debugging purposes
-        # See more: https://docs.spacelift.io/concepts/stack/stack-dependencies#enabling-sensitive-outputs-for-references
-        INVENTORY = {
-          trigger_always = true
-          # This is the name of the output in the OpenTofu stack that holds the host information
-          output_name = "inventory_tofu"
-          # This input name is reference in the `tofusible.yml` file
-          # It tells the dynamic inventory where to get information about the hosts
-          # Created in OpenTofu
-          input_name = "TOFUSIBLE_INVENTORY"
-          read_sensitive = true
-        }
-      }
-    }
-  }
+# Stack dependency reference: Pass inventory_tofu output to TOFUSIBLE_INVENTORY input
+resource "spacelift_stack_dependency_reference" "ansible_inventory_reference" {
+  stack_dependency_id = spacelift_stack_dependency.ansible_depends_on_opentofu.id
+  output_name         = "inventory_tofu"
+  input_name          = "TOFUSIBLE_INVENTORY"
+  trigger_always      = true
+  read_sensitive      = true
 }
 
 # S3 bucket for storing kubeconfig
