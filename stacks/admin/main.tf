@@ -185,13 +185,18 @@ resource "spacelift_stack_dependency" "ansible_depends_on_opentofu" {
   depends_on_stack_id = module.stack_opentofu.id
 }
 
-# Stack dependency reference: Pass inventory_tofu output to TOFUSIBLE_INVENTORY input
-resource "spacelift_stack_dependency_reference" "ansible_inventory_reference" {
+# Reference the inventory output from OpenTofu stack
+resource "spacelift_stack_dependency_reference" "inventory_output" {
   stack_dependency_id = spacelift_stack_dependency.ansible_depends_on_opentofu.id
   output_name         = "inventory_tofu"
-  input_name          = "TOFUSIBLE_INVENTORY"
-  trigger_always      = true
-  read_sensitive      = true
+}
+
+# Environment variable to pass sensitive inventory from OpenTofu to Ansible stack
+resource "spacelift_environment_variable" "ansible_inventory" {
+  stack_id   = module.stack_ansible.id
+  name       = "TOFUSIBLE_INVENTORY"
+  value      = spacelift_stack_dependency_reference.inventory_output.value
+  write_only = true
 }
 
 # S3 bucket for storing kubeconfig
