@@ -149,21 +149,6 @@ module "stack_ansible" {
   workflow_tool    = "ANSIBLE"
   ansible_playbook = "playbook.yml"
 
-  # Configure stack dependency to pull inventory from OpenTofu stack
-  dependencies = {
-    TOFUSIBLE = {
-      parent_stack_id = module.stack_opentofu.id
-
-      references = {
-        INVENTORY = {
-          trigger_always = true
-          output_name    = "inventory_tofu"
-          input_name     = "TOFUSIBLE_INVENTORY"
-        }
-      }
-    }
-  }
-
   hooks = {
     before = {
       # !IMPORTANT
@@ -192,6 +177,20 @@ module "stack_ansible" {
 
   # Use default worker pool for Ansible stack
   worker_pool_id = var.worker_pool_id
+}
+
+# Stack dependency between Ansible and OpenTofu stacks
+resource "spacelift_stack_dependency" "ansible_depends_on_opentofu" {
+  stack_id            = module.stack_ansible.id
+  depends_on_stack_id = module.stack_opentofu.id
+}
+
+# Stack dependency reference to pass inventory from OpenTofu to Ansible
+resource "spacelift_stack_dependency_reference" "ansible_inventory" {
+  stack_dependency_id = spacelift_stack_dependency.ansible_depends_on_opentofu.id
+  input_name          = "TOFUSIBLE_INVENTORY"
+  output_name         = "inventory_tofu"
+  trigger_always      = true
 }
 
 # S3 bucket for storing kubeconfig
