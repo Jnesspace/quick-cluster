@@ -17,6 +17,7 @@ variable "ansible_worker_pool_id" {
 variable "subnet_id" {
   type        = string
   description = "The subnet to launch instance in in the OpenTofu stack."
+  default     = null
 }
 
 variable "aws_default_region" {
@@ -51,6 +52,7 @@ variable "repo_branch" {
 variable "ssh_key_name" {
   type        = string
   description = "Name of existing AWS EC2 Key Pair for SSH access to instances"
+  default     = null
 }
 
 variable "run_tag" {
