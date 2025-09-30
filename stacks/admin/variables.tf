@@ -14,6 +14,12 @@ variable "ansible_worker_pool_id" {
   default     = null  # Use public worker pool
 }
 
+variable "worker_pool_id" {
+  type        = string
+  description = "The worker pool ID to use for all stacks."
+  default     = null  # Use public worker pool
+}
+
 variable "subnet_id" {
   type        = string
   description = "The subnet to launch instance in in the OpenTofu stack."
