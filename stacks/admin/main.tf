@@ -124,13 +124,13 @@ module "stack_ansible" {
       value     = "tofusible.yml"
       sensitive = false
     }
-    
+
     # S3 bucket for kubeconfig storage
     KUBECONFIG_S3_BUCKET = {
       value     = aws_s3_bucket.kubeconfig_storage.bucket
       sensitive = false
     }
-    
+
     AWS_DEFAULT_REGION = {
       value     = var.aws_default_region
       sensitive = false
@@ -149,6 +149,21 @@ module "stack_ansible" {
   workflow_tool    = "ANSIBLE"
   ansible_playbook = "playbook.yml"
 
+  # Configure stack dependency to pull inventory from OpenTofu stack
+  dependencies = {
+    TOFUSIBLE = {
+      parent_stack_id = module.stack_opentofu.id
+
+      references = {
+        INVENTORY = {
+          trigger_always = true
+          output_name    = "inventory_tofu"
+          input_name     = "TOFUSIBLE_INVENTORY"
+        }
+      }
+    }
+  }
+
   hooks = {
     before = {
       # !IMPORTANT
@@ -156,7 +171,7 @@ module "stack_ansible" {
       init  = ["chmod 644 tofusible.yml", "chmod 600 ${local.private_key_full_path}"]
       apply = ["chmod 644 tofusible.yml", "chmod 600 ${local.private_key_full_path}"]
     }
-    
+
     after = {
       apply = [
         # Ensure AWS CLI is available on the worker
@@ -177,19 +192,6 @@ module "stack_ansible" {
 
   # Use default worker pool for Ansible stack
   worker_pool_id = var.worker_pool_id
-}
-
-# Stack dependency: Ansible stack depends on OpenTofu stack
-resource "spacelift_stack_dependency" "ansible_depends_on_opentofu" {
-  stack_id            = module.stack_ansible.id
-  depends_on_stack_id = module.stack_opentofu.id
-}
-
-# Reference the inventory output from OpenTofu stack and pass as environment variable
-resource "spacelift_stack_dependency_reference" "inventory_output" {
-  stack_dependency_id = spacelift_stack_dependency.ansible_depends_on_opentofu.id
-  output_name         = "inventory_tofu"
-  input_name          = "TOFUSIBLE_INVENTORY"
 }
 
 # S3 bucket for storing kubeconfig

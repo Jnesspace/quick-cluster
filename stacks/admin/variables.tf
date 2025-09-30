@@ -8,18 +8,15 @@ variable "resource_space_id" {
   description = "The Space ID to use for created resources."
 }
 
-
-variable "worker_pool_id" {
+variable "ansible_worker_pool_id" {
   type        = string
-  description = "Optional default worker pool ID to use for Admin, OpenTofu and Kubernetes stacks."
-  default     = null
+  description = "The worker pool ID to use for ansible jobs."
+  default     = null  # Use public worker pool
 }
-
 
 variable "subnet_id" {
   type        = string
-  description = "Optional: existing subnet ID. If empty, the OpenTofu stack will auto-select a default subnet."
-  default     = ""
+  description = "The subnet to launch instance in in the OpenTofu stack."
 }
 
 variable "aws_default_region" {
@@ -27,7 +24,11 @@ variable "aws_default_region" {
   description = "The default region to use for the AWS provider."
 }
 
-// NOTE: create_new_subnet is deprecated/unused. Always use existing subnet via var.subnet_id.
+variable "create_new_subnet" {
+  type        = bool
+  description = "Whether to create a new subnet automatically for the OpenTofu stack."
+  default     = false
+}
 
 variable "instance_type" {
   type        = string
@@ -43,8 +44,13 @@ variable "stack_prefix" {
 
 variable "repo_branch" {
   type        = string
-  description = "Git branch in this repository to use for all child stacks."
+  description = "The branch to use for the repository"
   default     = "main"
+}
+
+variable "ssh_key_name" {
+  type        = string
+  description = "Name of existing AWS EC2 Key Pair for SSH access to instances"
 }
 
 variable "run_tag" {

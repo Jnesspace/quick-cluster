@@ -1,34 +1,37 @@
-# Kubernetes Example Stack
+# Kubernetes Hello World Stack
 
-This stack deploys an example nginx application to the K3s cluster provisioned by the Ansible stack.
+This stack deploys a simple nginx hello world application to the K3s cluster created by the Ansible stack.
 
-## Function
+## What It Does
 
-- Retrieves kubeconfig from S3 as prepared by the Admin/Ansible workflow
-- Applies deployment and service manifests
-- Exposes the service via NodePort on TCP 30080
+- **Downloads kubeconfig** from S3 bucket created by admin stack
+- **Deploys nginx hello world** with custom welcome page
+- **Exposes via NodePort** on port 30080
+- **Provides cleanup** capability
 
-## Process
+## How It Works
 
-1. Pre-deployment: Download kubeconfig from S3 and validate connectivity
-2. Deployment: Apply manifests under `manifests/`
-3. Post-deployment: Provide service access details
+1. **Pre-deployment**: Downloads kubeconfig from S3 and verifies cluster connectivity
+2. **Deployment**: Applies Kubernetes manifests for nginx deployment and service
+3. **Post-deployment**: Shows access instructions and service endpoints
 
-## Access
+## Accessing the Application
 
-Obtain an instance public IP and access the NodePort:
+After deployment, you can access the hello world app via any EC2 instance public IP:
 
 ```bash
+# Get EC2 instance public IPs
 aws ec2 describe-instances \
   --filters "Name=tag:Name,Values=tofu-dev-*" \
   --query 'Reservations[].Instances[].PublicIpAddress' \
   --output text
 
+# Access hello world app
 curl http://INSTANCE_IP:30080
 ```
 
 ## Files
 
-- `manifests/`: Kubernetes YAML manifests
-- `scripts/`: Helper scripts for kubeconfig setup
-- `main.tf`: Spacelift stack configuration
+- `manifests/` - Kubernetes YAML manifests
+- `scripts/` - Helper scripts for kubeconfig setup
+- `main.tf` - Spacelift stack configuration (added to admin stack)
