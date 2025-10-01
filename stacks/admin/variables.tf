@@ -52,7 +52,7 @@ variable "stack_prefix" {
 variable "repo_branch" {
   type        = string
   description = "The branch to use for the repository"
-  default     = "main"
+  default     = "dev"
 }
 
 variable "ssh_key_name" {
