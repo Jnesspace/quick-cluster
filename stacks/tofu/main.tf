@@ -274,6 +274,28 @@ resource "aws_instance" "tofu_dev_3" {
   }
 }
 
+resource "aws_instance" "tofu_dev_4" {
+  ami                    = data.aws_ami.this.id
+  key_name               = var.aws_private_key_name
+  instance_type          = var.instance_type
+  subnet_id              = local.subnet_id_final
+  vpc_security_group_ids = [aws_security_group.tofusible_sg.id]
+
+  # Force recreation on each deployment
+  lifecycle {
+    replace_triggered_by = [
+      time_static.deployment_time
+    ]
+  }
+
+  tags = {
+    Name         = "tofu-dev-4"
+    Environment  = "dev"
+    Role         = "k8s-node-4"
+    DeploymentId = time_static.deployment_time.unix
+  }
+}
+
 ##############################################################
 ## Add dev nodes to the inventory
 ##############################################################
@@ -322,6 +344,21 @@ module "host_tofu_dev_3" {
   }
 }
 
+module "host_tofu_dev_4" {
+  source  = "spacelift.io/spacelift-solutions/tofusible-host/spacelift"
+  version = "1.0.0"
+
+  host                 = aws_instance.tofu_dev_4.public_ip
+  user                 = "ubuntu"
+  ssh_private_key_file = var.private_key_path
+  groups               = ["tofu", "dev", "k8s_nodes"]
+  extra_vars = {
+    node_role    = "k8s-node-4"
+    private_ip   = aws_instance.tofu_dev_4.private_ip
+    instance_id  = aws_instance.tofu_dev_4.id
+  }
+}
+
 ############################################################################################
 ## Output the inventory and AWS information
 ############################################################################################
@@ -329,7 +366,8 @@ output "inventory_tofu" {
   value = [
     module.host_tofu_dev_1.spec,
     module.host_tofu_dev_2.spec,
-    module.host_tofu_dev_3.spec
+    module.host_tofu_dev_3.spec,
+    module.host_tofu_dev_4.spec
   ]
   sensitive = true
 }
@@ -376,6 +414,12 @@ output "instances_info" {
       public_ip  = aws_instance.tofu_dev_3.public_ip
       private_ip = aws_instance.tofu_dev_3.private_ip
       az         = aws_instance.tofu_dev_3.availability_zone
+    }
+    dev_4 = {
+      id         = aws_instance.tofu_dev_4.id
+      public_ip  = aws_instance.tofu_dev_4.public_ip
+      private_ip = aws_instance.tofu_dev_4.private_ip
+      az         = aws_instance.tofu_dev_4.availability_zone
     }
   }
 }
