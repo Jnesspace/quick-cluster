@@ -178,23 +178,24 @@ module "stack_ansible" {
   # Use default worker pool for Ansible stack
   worker_pool_id = var.worker_pool_id
 
-  # Use the modern dependencies block instead of separate resources
+  # Dependencies block for passing inventory from OpenTofu to Ansible
   dependencies = {
     TOFUSIBLE = {
       parent_stack_id = module.stack_opentofu.id
 
       references = {
         INVENTORY = {
-          trigger_always = true
           output_name    = "inventory_tofu"
           input_name     = "TOFUSIBLE_INVENTORY"
+          trigger_always = true
         }
       }
     }
   }
 }
 
-# Stack dependency is now managed by the dependencies block in module.stack_ansible above
+# NOTE: Stack dependency is managed by the dependencies block in module.stack_ansible above
+# Do not create separate spacelift_stack_dependency resources as they will conflict
 
 # S3 bucket for storing kubeconfig
 resource "aws_s3_bucket" "kubeconfig_storage" {
