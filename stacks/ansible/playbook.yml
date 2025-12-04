@@ -1,0 +1,233 @@
+---
+- name: Generate a single K3s token
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Generate K3s token
+      set_fact:
+        k3s_token: "{{ lookup('pipe','date +%s') }}-tofusible-cluster"
+
+- name: Deploy K3s Cluster
+  hosts: tofu
+  become: yes
+  gather_facts: yes
+  pre_tasks:
+    - name: Propagate K3s token to all hosts
+      set_fact:
+        k3s_token: "{{ hostvars['localhost'].k3s_token }}"
+  vars:
+    k3s_version: "v1.28.5+k3s1"
+  tasks:
+    - name: Update apt cache and install packages
+      ansible.builtin.apt:
+        update_cache: yes
+        name: [curl, wget, jq]
+        state: present
+
+# Install K3s Server (First Node)
+- name: Install K3s Server
+  hosts: "{{ groups['tofu'][0] }}"
+  become: yes
+  vars:
+    k3s_version: "v1.28.5+k3s1"
+  tasks:
+    - name: Get public IP from EC2 metadata service
+      ansible.builtin.uri:
+        url: http://169.254.169.254/latest/meta-data/public-ipv4
+        method: GET
+        return_content: yes
+        timeout: 10
+      register: ec2_public_ip
+      when: not ansible_check_mode
+
+    - name: Fallback to ansible detected public IP if metadata fails
+      ansible.builtin.set_fact:
+        public_ip_final: "{{ ec2_public_ip.content | default(ansible_default_ipv4.address) }}"
+      when: not ansible_check_mode
+
+    - name: Display IP information
+      ansible.builtin.debug:
+        msg: |
+          Private IP: {{ private_ip }}
+          Public IP from metadata: {{ ec2_public_ip.content | default('FAILED') }}
+          Ansible detected public IP: {{ ansible_default_ipv4.address }}
+          Final public IP to use: {{ public_ip_final | default('not set') }}
+      when: not ansible_check_mode
+
+    - name: Install K3s server with public IP configuration
+      ansible.builtin.shell: |
+        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" sh -s - server \
+          --token "{{ k3s_token }}" \
+          --node-external-ip "{{ public_ip_final }}" \
+          --node-ip "{{ private_ip }}" \
+          --tls-san "{{ public_ip_final }}" \
+          --tls-san "{{ private_ip }}" \
+          --tls-san "localhost" \
+          --tls-san "127.0.0.1" \
+          --bind-address "0.0.0.0" \
+          --advertise-address "{{ public_ip_final }}" \
+          --disable traefik \
+          --disable servicelb \
+          --write-kubeconfig-mode 644
+      args:
+        creates: /etc/systemd/system/k3s.service
+      when: not ansible_check_mode
+
+    - name: Wait for K3s server to start
+      ansible.builtin.wait_for:
+        port: 6443
+        host: "127.0.0.1"
+        delay: 10
+        timeout: 180
+      when: not ansible_check_mode
+
+    - name: Verify TLS certificate includes public IP
+      ansible.builtin.shell: |
+        echo | openssl s_client -connect {{ public_ip_final }}:6443 -servername {{ public_ip_final }} 2>/dev/null | \
+        openssl x509 -noout -text | grep -A5 "Subject Alternative Name"
+      register: cert_sans
+      failed_when: false
+      when: not ansible_check_mode
+
+    - name: Display certificate SANs
+      ansible.builtin.debug:
+        msg: |
+          Certificate Subject Alternative Names:
+          {{ cert_sans.stdout | default('Could not retrieve certificate info') }}
+          
+          Expected to see: {{ public_ip_final }}
+      when: not ansible_check_mode
+
+    - name: Test external connectivity to public IP
+      ansible.builtin.wait_for:
+        port: 6443
+        host: "{{ public_ip_final }}"
+        delay: 5
+        timeout: 60
+      when: not ansible_check_mode
+      register: external_connectivity
+      failed_when: false
+
+    - name: Display connectivity test result
+      ansible.builtin.debug:
+        msg: |
+          External connectivity test: {{ 'SUCCESS' if external_connectivity.failed is not defined else 'FAILED' }}
+          {% if external_connectivity.failed is defined %}
+          This suggests network/security group issues
+          {% endif %}
+      when: not ansible_check_mode
+
+    - name: Get kubeconfig and patch for public IP access
+      block:
+        - name: Read original kubeconfig file
+          ansible.builtin.slurp:
+            src: /etc/rancher/k3s/k3s.yaml
+          register: kubeconfig_content
+
+        - name: Create kubeconfig with public IP
+          ansible.builtin.copy:
+            content: "{{ kubeconfig_content.content | b64decode | regex_replace('server: https://[^:]+:6443', 'server: https://' + public_ip_final + ':6443') }}"
+            dest: /tmp/kubeconfig-ready.yaml
+            mode: '0644'
+
+        - name: Verify kubeconfig server URL
+          ansible.builtin.shell: grep "server:" /tmp/kubeconfig-ready.yaml
+          register: kubeconfig_verification
+
+        - name: Display kubeconfig server URL
+          ansible.builtin.debug:
+            msg: "Kubeconfig server URL: {{ kubeconfig_verification.stdout }}"
+
+        - name: Fetch kubeconfig to Spacelift runner
+          ansible.builtin.fetch:
+            src: /tmp/kubeconfig-ready.yaml
+            dest: /tmp/kubeconfig-ready.yaml
+            flat: yes
+
+        - name: Read the ready kubeconfig
+          ansible.builtin.slurp:
+            src: /tmp/kubeconfig-ready.yaml
+          register: ready_kubeconfig
+
+        - name: Output kubeconfig for dependencies
+          ansible.builtin.set_stats:
+            data:
+              kubeconfig_content: "{{ ready_kubeconfig.content | b64decode }}"
+
+        - name: Display kubeconfig
+          ansible.builtin.debug:
+            msg: |
+              🎉 K3s Server Ready! Kubeconfig available:
+              {{ ready_kubeconfig.content | b64decode }}
+      when: not ansible_check_mode
+
+    # Planning mode summary
+    - name: K3s server installation summary (planning mode)
+      ansible.builtin.debug:
+        msg: |
+          ========================================
+          📋 K3S SERVER INSTALLATION PLAN
+          ========================================
+          
+          During actual deployment, this node will:
+          
+          1. ✅ Fetch public IP from EC2 metadata service
+          2. ✅ Install K3s server with public IP in TLS certificate
+          3. ✅ Configure K3s to advertise on public IP
+          4. ✅ Add TLS SANs for public IP, private IP, and localhost
+          5. ✅ Bind K3s API server to all interfaces (0.0.0.0)
+          6. ✅ Generate kubeconfig with public IP endpoint
+          7. ✅ Verify external connectivity
+          
+          ⚠️  Installation skipped during planning
+          ✅ Actual deployment will configure everything properly
+          ========================================
+      when: ansible_check_mode
+
+# Install K3s Agents (Background)
+- name: Install K3s Agents
+  hosts: tofu:!{{ groups['tofu'][0] }}
+  become: yes
+  vars:
+    k3s_version: "v1.28.5+k3s1"
+  tasks:
+    - name: Get server public IP from EC2 metadata
+      ansible.builtin.uri:
+        url: http://169.254.169.254/latest/meta-data/public-ipv4
+        method: GET
+        return_content: yes
+        timeout: 10
+      register: server_public_ip
+      delegate_to: "{{ groups['tofu'][0] }}"
+      when: not ansible_check_mode
+
+    - name: Set server public IP variable
+      ansible.builtin.set_fact:
+        k3s_server_public_ip: "{{ server_public_ip.content }}"
+      when: not ansible_check_mode
+
+    - name: Display agent connection info
+      ansible.builtin.debug:
+        msg: |
+          Agent {{ inventory_hostname }} will connect to:
+          Server Public IP: {{ k3s_server_public_ip }}
+          Agent Token: {{ k3s_token }}
+      when: not ansible_check_mode
+
+    - name: Install K3s agent (background)
+      ansible.builtin.shell: |
+        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" sh -s - agent \
+          --token "{{ k3s_token }}" \
+          --server "https://{{ k3s_server_public_ip }}:6443" \
+          --node-external-ip "{{ ansible_default_ipv4.address }}" \
+          --node-ip "{{ private_ip }}"
+      args:
+        creates: /etc/systemd/system/k3s-agent.service
+      async: 300
+      poll: 0
+      when: not ansible_check_mode
+
+    - name: Agent installation started
+      ansible.builtin.debug:
+        msg: "🚀 K3s agent installation started for {{ inventory_hostname }} connecting to {{ k3s_server_public_ip }}:6443"
+      when: not ansible_check_mode

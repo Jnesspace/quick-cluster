@@ -1,0 +1,145 @@
+inputs:
+  - id: aws_integration_id
+    name: AWS Integration ID
+    description: "ID of the AWS integration to attach to the stack"
+    type: short_text
+    default: "01JV4YKENC7KXV3MNBYPSH88AX"  # jakespace #UPDATE_TO_YOUR_VALUE
+  - id: resource_space_id
+    name: Space ID for Child Resources
+    description: "Spacelift Space ID used by the OpenTofu, Ansible and Kubernetes stacks that this admin stack creates"
+    type: short_text
+    default: "test-01K09P35SJAB2S1C856MEGPJZX"  #UPDATE_TO_YOUR_VALUE
+  - id: aws_default_region
+    name: AWS Region
+    description: "AWS region (e.g., eu-west-1)"
+    type: short_text
+
+
+  - id: worker_pool_id
+    name: Worker Pool ID for All Stacks (optional)
+    description: "Worker pool ID to use for Admin, OpenTofu and Kubernetes stacks; leave empty to use public worker pool"
+    type: short_text
+    default: ""
+
+  - id: deploy_private_workers
+    name: Deploy Private Workers to Cluster
+    description: "Number of Spacelift private workers to deploy to the K3s cluster (0 = disabled)"
+    type: select
+    options:
+      - "0"
+      - "1"
+      - "2"
+      - "3"
+      - "4"
+      - "5"
+      - "6"
+      - "7"
+      - "8"
+      - "9"
+      - "10"
+    default: "0"
+
+
+
+  - id: instance_type
+    name: EC2 Instance Type
+    description: "Size of EC2 instances for the cluster"
+    type: select
+    options:
+      - t3.small
+      - t3.medium
+      - t3.large
+    default: t3.small
+
+  - id: root_volume_size
+    name: Root Volume Size (GB)
+    description: "Size of the root EBS volume in GB. Recommended: 50GB+ for Spacelift private workers"
+    type: short_text
+    default: "20"
+
+  - id: root_volume_type
+    name: Root Volume Type
+    description: "EBS volume type"
+    type: select
+    options:
+      - gp3
+      - gp2
+      - io1
+      - io2
+    default: gp3
+
+  - id: stack_prefix
+    name: Stack Name Prefix (optional)
+    description: "Prefix added to all stack names; if left blank, a random string will be used"
+    type: short_text
+    default: ""
+
+  - id: repo_branch
+    name: Repository Branch
+    description: "Git branch of this repository to use (default: main)"
+    type: short_text
+    default: "main"
+
+  - id: run_tag
+    name: Unique Run Tag
+    description: "Unique tag for this deployment (leave blank to auto-generate)"
+    type: short_text
+    default: ""
+
+options:
+  trigger_run: true  # Automatically trigger a run after creation
+
+stack:
+  name: '${{ (inputs.stack_prefix != "" ? inputs.stack_prefix + "-" : "") + (inputs.run_tag != "" ? inputs.run_tag : context.random_string) + "-TofusibleKube-Admin" }}'
+  space: ${{ inputs.resource_space_id }}
+  administrative: true
+  description: Admin stack that provisions OpenTofu, Ansible and Kubernetes stacks.
+  labels:
+    - tofusible
+    - admin
+    - blueprint
+  auto_deploy: true
+  vcs:
+    branch: ${{ inputs.repo_branch }}
+    repository: Quick-Cluster  #UPDATE_TO_YOUR_VALUE
+    provider: GITHUB
+    project_root: stacks/admin
+  vendor:
+    terraform:
+      manage_state: true
+      version: "1.6.0"
+      workflow_tool: OPEN_TOFU
+
+  attachments:
+    clouds:
+      aws:
+        id: ${{ inputs.aws_integration_id }}
+        read: true
+        write: true
+
+  environment:
+    variables:
+      - name: TF_VAR_aws_integration_id
+        value: ${{ inputs.aws_integration_id }}
+      - name: TF_VAR_resource_space_id
+        value: ${{ inputs.resource_space_id }}
+      - name: TF_VAR_aws_default_region
+        value: ${{ inputs.aws_default_region }}
+      - name: TF_VAR_worker_pool_id
+        value: ${{ inputs.worker_pool_id }}
+      - name: TF_VAR_deploy_private_workers
+        value: "${{ inputs.deploy_private_workers }}"
+      - name: TF_VAR_instance_type
+        value: ${{ inputs.instance_type }}
+      - name: TF_VAR_root_volume_size
+        value: "${{ inputs.root_volume_size }}"
+      - name: TF_VAR_root_volume_type
+        value: ${{ inputs.root_volume_type }}
+      - name: TF_VAR_stack_prefix
+        value: ${{ inputs.stack_prefix }}
+      - name: TF_VAR_repo_branch
+        value: ${{ inputs.repo_branch }}
+      - name: TF_VAR_run_tag
+        value: '${{ inputs.run_tag != "" ? inputs.run_tag : context.random_string }}'
+      - name: AWS_DEFAULT_REGION
+        value: ${{ inputs.aws_default_region }} 
