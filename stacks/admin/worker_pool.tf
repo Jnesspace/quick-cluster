@@ -14,7 +14,7 @@
 locals {
   deploy_workers   = tonumber(var.deploy_private_workers) > 0
   worker_pool_size = tonumber(var.deploy_private_workers)
-  worker_pool_name = "${local.run_tag}-workers"
+  worker_pool_name = "${local.run_tag_k8s}-workers"
 }
 
 #──────────────────────────────────────────────────────────────────────────────

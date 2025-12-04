@@ -45,6 +45,8 @@ locals {
   unique_tag = var.run_tag != "" ? var.run_tag : random_string.name_suffix[0].result
   unique_prefix = "${local.name_prefix}${local.unique_tag}-"
   run_tag       = trimsuffix(local.unique_prefix, "-")
+  # RFC 1123 compliant name for Kubernetes resources (lowercase, alphanumeric, hyphens)
+  run_tag_k8s   = lower(local.run_tag)
   bucket_name   = lower(replace(local.unique_prefix, "-", ""))
 }
 
