@@ -38,10 +38,14 @@ resource "random_string" "prefix_suffix" {
 }
 
 locals {
+  # Cluster type booleans for clean conditionals
+  is_k3s = var.cluster_type == "k3s"
+  is_eks = var.cluster_type == "eks"
+
   # Auto-generate prefix if not provided
   auto_prefix = var.stack_prefix != "" ? var.stack_prefix : "tofusible-${random_string.prefix_suffix[0].result}"
   name_prefix = "${local.auto_prefix}-"
-  
+
   unique_tag = var.run_tag != "" ? var.run_tag : random_string.name_suffix[0].result
   unique_prefix = "${local.name_prefix}${local.unique_tag}-"
   run_tag       = trimsuffix(local.unique_prefix, "-")
@@ -66,15 +70,39 @@ module "stack_opentofu" {
   }
 
   environment_variables = {
-    # We pass this to the OpenTofu stack so it can be used in the inventory
+    # Cluster type selection (k3s or eks)
+    TF_VAR_cluster_type = {
+      value     = var.cluster_type
+      sensitive = false
+    }
+
+    # Run tag for resource naming
+    TF_VAR_run_tag = {
+      value     = local.run_tag
+      sensitive = false
+    }
+
+    # S3 bucket for kubeconfig (EKS uploads directly)
+    TF_VAR_kubeconfig_s3_bucket = {
+      value     = aws_s3_bucket.kubeconfig_storage.bucket
+      sensitive = false
+    }
+
+    # AWS region for EKS kubeconfig
+    TF_VAR_aws_default_region = {
+      value     = var.aws_default_region
+      sensitive = false
+    }
+
+    # We pass this to the OpenTofu stack so it can be used in the inventory (k3s only)
     TF_VAR_private_key_path = {
       value     = local.private_key_full_path
       sensitive = false
     }
 
-    # We pass this to the OpenTofu stack so it can be used in the aws ec2 instances
+    # We pass this to the OpenTofu stack so it can be used in the aws ec2 instances (k3s only)
     TF_VAR_aws_private_key_name = {
-      value     = aws_key_pair.this.key_name
+      value     = local.is_k3s ? aws_key_pair.this[0].key_name : ""
       sensitive = false
     }
 
@@ -105,9 +133,10 @@ module "stack_opentofu" {
     }
   }
 
-  contexts = {
-    tofusible_ssh_key = spacelift_context.ssh_keys.id
-  }
+  # SSH key context only needed for k3s
+  contexts = local.is_k3s ? {
+    tofusible_ssh_key = spacelift_context.ssh_keys[0].id
+  } : {}
 
   labels            = ["${local.run_tag}-opentofu"]
   project_root      = "stacks/tofu"
@@ -117,7 +146,9 @@ module "stack_opentofu" {
   worker_pool_id = var.worker_pool_id
 }
 
+# Ansible stack is only created for k3s (installs k3s on EC2 instances)
 module "stack_ansible" {
+  count  = local.is_k3s ? 1 : 0
   source = "spacelift.io/spacelift-solutions/stacks-module/spacelift"
 
   description     = "Stack that configures EC2 servers"
@@ -154,7 +185,7 @@ module "stack_ansible" {
 
   contexts = {
     # We attach the ssh key to the stack so ansible can use it to connect to the servers
-    tofusible_ssh_key = spacelift_context.ssh_keys.id
+    tofusible_ssh_key = spacelift_context.ssh_keys[0].id
   }
 
   labels            = ["${local.run_tag}-ansible"]
@@ -312,10 +343,18 @@ resource "spacelift_environment_variable" "kubernetes_kubeconfig" {
   value    = "/home/spacelift/.kube/config"
 }
 
-# Dependency on Ansible stack
+# k3s: Kubernetes depends on Ansible (which installs k3s and uploads kubeconfig)
 resource "spacelift_stack_dependency" "kubernetes_depends_on_ansible" {
+  count               = local.is_k3s ? 1 : 0
   stack_id            = spacelift_stack.tofusible-kubernetes.id
-  depends_on_stack_id = module.stack_ansible.id
+  depends_on_stack_id = module.stack_ansible[0].id
+}
+
+# EKS: Kubernetes depends directly on OpenTofu (which creates EKS and uploads kubeconfig)
+resource "spacelift_stack_dependency" "kubernetes_depends_on_opentofu" {
+  count               = local.is_eks ? 1 : 0
+  stack_id            = spacelift_stack.tofusible-kubernetes.id
+  depends_on_stack_id = module.stack_opentofu.id
 }
 
 # Define a reusable Context that downloads your kubeconfig from S3

@@ -1,4 +1,13 @@
 inputs:
+  - id: cluster_type
+    name: Cluster Type
+    description: "Choose between managed EKS or self-managed k3s on EC2"
+    type: select
+    options:
+      - k3s
+      - eks
+    default: k3s
+
   - id: aws_integration_id
     name: AWS Integration ID
     description: "ID of the AWS integration to attach to the stack"
@@ -119,6 +128,8 @@ stack:
 
   environment:
     variables:
+      - name: TF_VAR_cluster_type
+        value: ${{ inputs.cluster_type }}
       - name: TF_VAR_aws_integration_id
         value: ${{ inputs.aws_integration_id }}
       - name: TF_VAR_resource_space_id
