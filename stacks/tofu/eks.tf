@@ -3,6 +3,16 @@
 # Only created when cluster_type = "eks"
 #───────────────────────────────────────────────────────────────────────────────
 
+# Get current caller identity to extract the IAM role ARN
+data "aws_caller_identity" "current" {
+  count = local.is_eks ? 1 : 0
+}
+
+data "aws_iam_session_context" "current" {
+  count = local.is_eks ? 1 : 0
+  arn   = data.aws_caller_identity.current[0].arn
+}
+
 module "eks" {
   count   = local.is_eks ? 1 : 0
   source  = "terraform-aws-modules/eks/aws"
@@ -15,8 +25,31 @@ module "eks" {
   vpc_id     = local.vpc_id_final
   subnet_ids = data.aws_subnets.default_vpc.ids
 
-  # Cluster access
+  # Cluster access - enable both API and ConfigMap for flexibility
   cluster_endpoint_public_access = true
+  authentication_mode            = "API_AND_CONFIG_MAP"
+
+  # Grant admin access to the IAM role used by Spacelift
+  # This ensures all stacks using the same AWS integration can access the cluster
+  enable_cluster_creator_admin_permissions = true
+
+  access_entries = {
+    # Add explicit access for the IAM role (without session name)
+    # This allows any assumed-role session of this role to access the cluster
+    spacelift_role = {
+      principal_arn = data.aws_iam_session_context.current[0].issuer_arn
+      type          = "STANDARD"
+
+      policy_associations = {
+        admin = {
+          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = {
+            type = "cluster"
+          }
+        }
+      }
+    }
+  }
 
   # Enable IRSA for service accounts
   enable_irsa = true
