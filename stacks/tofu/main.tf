@@ -12,6 +12,7 @@ terraform {
   }
 }
 
+
 variable "cluster_type" {
   type        = string
   description = "Type of Kubernetes cluster: 'k3s' (self-managed on EC2) or 'eks' (AWS managed)"
