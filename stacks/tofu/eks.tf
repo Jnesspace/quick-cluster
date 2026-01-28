@@ -27,6 +27,9 @@ module "eks" {
   # Enable IRSA for service accounts
   enable_irsa = true
 
+  # Disable CloudWatch logging (control plane logs disabled)
+  cluster_enabled_log_types = []
+
   # Managed node groups (similar to k3s 3-node setup)
   eks_managed_node_groups = {
     default = {
