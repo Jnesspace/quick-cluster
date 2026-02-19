@@ -6,6 +6,21 @@ terraform {
     time = {
       source = "hashicorp/time"
     }
+    local = {
+      source = "hashicorp/local"
+    }
+  }
+}
+
+
+variable "cluster_type" {
+  type        = string
+  description = "Type of Kubernetes cluster: 'k3s' (self-managed on EC2) or 'eks' (AWS managed)"
+  default     = "k3s"
+
+  validation {
+    condition     = contains(["k3s", "eks"], var.cluster_type)
+    error_message = "cluster_type must be either 'k3s' or 'eks'"
   }
 }
 
@@ -13,12 +28,32 @@ terraform {
 
 variable "aws_private_key_name" {
   type        = string
-  description = "The name of the private key in AWS to use for SSH"
+  description = "The name of the private key in AWS to use for SSH (k3s only)"
+  default     = ""
 }
 
 variable "private_key_path" {
   type        = string
-  description = "The path to the private key to use for SSH"
+  description = "The path to the private key to use for SSH (k3s only)"
+  default     = ""
+}
+
+variable "run_tag" {
+  type        = string
+  description = "Unique identifier for this deployment"
+  default     = "tofusible"
+}
+
+variable "kubeconfig_s3_bucket" {
+  type        = string
+  description = "S3 bucket for kubeconfig storage (EKS uploads directly)"
+  default     = ""
+}
+
+variable "aws_default_region" {
+  type        = string
+  description = "AWS region for EKS kubeconfig"
+  default     = "us-east-1"
 }
 
 variable "create_new_subnet" {
@@ -76,8 +111,10 @@ resource "aws_subnet" "generated" {
 }
 # -----------------------------------------------------------------------------
 
-# Create a security group that allows SSH and K3s traffic
+# Create a security group that allows SSH and K3s traffic (k3s only)
 resource "aws_security_group" "tofusible_sg" {
+  count = local.is_k3s ? 1 : 0
+
   name_prefix = "tofusible-k3s-"
   description = "Security group for TofusibleKube K3s cluster"
   vpc_id      = local.vpc_id_final
@@ -188,6 +225,10 @@ data "aws_subnet" "default_selected" {
 }
 
 locals {
+  # Cluster type booleans for clean conditionals
+  is_k3s = var.cluster_type == "k3s"
+  is_eks = var.cluster_type == "eks"
+
   subnet_id_final = (
     var.subnet_id != null && var.subnet_id != ""
   ) ? var.subnet_id : element(data.aws_subnets.default_vpc.ids, 0)
@@ -219,15 +260,17 @@ data "aws_ami" "this" {
 resource "time_static" "deployment_time" {}
 
 ###############################
-## Create 3 AWS instances for dev environment only
+## K3s: Create 3 AWS instances for dev environment
 ###############################
 
 resource "aws_instance" "tofu_dev_1" {
+  count = local.is_k3s ? 1 : 0
+
   ami                    = data.aws_ami.this.id
   key_name               = var.aws_private_key_name
   instance_type          = var.instance_type
   subnet_id              = local.subnet_id_final
-  vpc_security_group_ids = [aws_security_group.tofusible_sg.id]
+  vpc_security_group_ids = [aws_security_group.tofusible_sg[0].id]
 
   root_block_device {
     volume_size           = var.root_volume_size
@@ -252,11 +295,13 @@ resource "aws_instance" "tofu_dev_1" {
 }
 
 resource "aws_instance" "tofu_dev_2" {
+  count = local.is_k3s ? 1 : 0
+
   ami                    = data.aws_ami.this.id
   key_name               = var.aws_private_key_name
   instance_type          = var.instance_type
   subnet_id              = local.subnet_id_final
-  vpc_security_group_ids = [aws_security_group.tofusible_sg.id]
+  vpc_security_group_ids = [aws_security_group.tofusible_sg[0].id]
 
   root_block_device {
     volume_size           = var.root_volume_size
@@ -281,11 +326,13 @@ resource "aws_instance" "tofu_dev_2" {
 }
 
 resource "aws_instance" "tofu_dev_3" {
+  count = local.is_k3s ? 1 : 0
+
   ami                    = data.aws_ami.this.id
   key_name               = var.aws_private_key_name
   instance_type          = var.instance_type
   subnet_id              = local.subnet_id_final
-  vpc_security_group_ids = [aws_security_group.tofusible_sg.id]
+  vpc_security_group_ids = [aws_security_group.tofusible_sg[0].id]
 
   root_block_device {
     volume_size           = var.root_volume_size
@@ -310,68 +357,80 @@ resource "aws_instance" "tofu_dev_3" {
 }
 
 ##############################################################
-## Add dev nodes to the inventory
+## K3s: Add dev nodes to the inventory
 ##############################################################
 module "host_tofu_dev_1" {
+  count   = local.is_k3s ? 1 : 0
   source  = "spacelift.io/spacelift-solutions/tofusible-host/spacelift"
   version = "1.0.0"
 
-  host                 = aws_instance.tofu_dev_1.public_ip
+  host                 = aws_instance.tofu_dev_1[0].public_ip
   user                 = "ubuntu"
   ssh_private_key_file = var.private_key_path
   groups               = ["tofu", "dev", "k8s_nodes"]
   extra_vars = {
     node_role    = "k8s-node-1"
-    private_ip   = aws_instance.tofu_dev_1.private_ip
-    instance_id  = aws_instance.tofu_dev_1.id
+    private_ip   = aws_instance.tofu_dev_1[0].private_ip
+    instance_id  = aws_instance.tofu_dev_1[0].id
   }
 }
 
 module "host_tofu_dev_2" {
+  count   = local.is_k3s ? 1 : 0
   source  = "spacelift.io/spacelift-solutions/tofusible-host/spacelift"
   version = "1.0.0"
 
-  host                 = aws_instance.tofu_dev_2.public_ip
+  host                 = aws_instance.tofu_dev_2[0].public_ip
   user                 = "ubuntu"
   ssh_private_key_file = var.private_key_path
   groups               = ["tofu", "dev", "k8s_nodes"]
   extra_vars = {
     node_role    = "k8s-node-2"
-    private_ip   = aws_instance.tofu_dev_2.private_ip
-    instance_id  = aws_instance.tofu_dev_2.id
+    private_ip   = aws_instance.tofu_dev_2[0].private_ip
+    instance_id  = aws_instance.tofu_dev_2[0].id
   }
 }
 
 module "host_tofu_dev_3" {
+  count   = local.is_k3s ? 1 : 0
   source  = "spacelift.io/spacelift-solutions/tofusible-host/spacelift"
   version = "1.0.0"
 
-  host                 = aws_instance.tofu_dev_3.public_ip
+  host                 = aws_instance.tofu_dev_3[0].public_ip
   user                 = "ubuntu"
   ssh_private_key_file = var.private_key_path
   groups               = ["tofu", "dev", "k8s_nodes"]
   extra_vars = {
     node_role    = "k8s-node-3"
-    private_ip   = aws_instance.tofu_dev_3.private_ip
-    instance_id  = aws_instance.tofu_dev_3.id
+    private_ip   = aws_instance.tofu_dev_3[0].private_ip
+    instance_id  = aws_instance.tofu_dev_3[0].id
   }
 }
 
 ############################################################################################
-## Output the inventory and AWS information
+## Outputs
 ############################################################################################
+
+# Cluster type for downstream stacks
+output "cluster_type" {
+  value       = var.cluster_type
+  description = "The type of cluster deployed (k3s or eks)"
+}
+
+# K3s: Output the inventory for Ansible (only when k3s)
 output "inventory_tofu" {
-  value = [
-    module.host_tofu_dev_1.spec,
-    module.host_tofu_dev_2.spec,
-    module.host_tofu_dev_3.spec
-  ]
+  value = local.is_k3s ? [
+    module.host_tofu_dev_1[0].spec,
+    module.host_tofu_dev_2[0].spec,
+    module.host_tofu_dev_3[0].spec
+  ] : []
   sensitive = true
 }
 
 # Output AWS information for reference
 output "aws_info" {
   value = {
+    cluster_type        = var.cluster_type
     vpc_id              = local.vpc_id_final
     vpc_cidr_block      = (
       var.subnet_id != null && var.subnet_id != ""
@@ -383,34 +442,34 @@ output "aws_info" {
     availability_zone   = (
       var.subnet_id != null && var.subnet_id != ""
     ) ? data.aws_subnet.selected[0].availability_zone : data.aws_subnet.default_selected[0].availability_zone
-    security_group_id   = aws_security_group.tofusible_sg.id
-    security_group_name = aws_security_group.tofusible_sg.name
+    security_group_id   = local.is_k3s ? aws_security_group.tofusible_sg[0].id : null
+    security_group_name = local.is_k3s ? aws_security_group.tofusible_sg[0].name : null
     ami_id              = data.aws_ami.this.id
     ami_name            = data.aws_ami.this.name
     available_azs       = data.aws_availability_zones.available.names
   }
 }
 
-# Output instance information
+# K3s: Output instance information (only when k3s)
 output "instances_info" {
-  value = {
+  value = local.is_k3s ? {
     dev_1 = {
-      id         = aws_instance.tofu_dev_1.id
-      public_ip  = aws_instance.tofu_dev_1.public_ip
-      private_ip = aws_instance.tofu_dev_1.private_ip
-      az         = aws_instance.tofu_dev_1.availability_zone
+      id         = aws_instance.tofu_dev_1[0].id
+      public_ip  = aws_instance.tofu_dev_1[0].public_ip
+      private_ip = aws_instance.tofu_dev_1[0].private_ip
+      az         = aws_instance.tofu_dev_1[0].availability_zone
     }
     dev_2 = {
-      id         = aws_instance.tofu_dev_2.id
-      public_ip  = aws_instance.tofu_dev_2.public_ip
-      private_ip = aws_instance.tofu_dev_2.private_ip
-      az         = aws_instance.tofu_dev_2.availability_zone
+      id         = aws_instance.tofu_dev_2[0].id
+      public_ip  = aws_instance.tofu_dev_2[0].public_ip
+      private_ip = aws_instance.tofu_dev_2[0].private_ip
+      az         = aws_instance.tofu_dev_2[0].availability_zone
     }
     dev_3 = {
-      id         = aws_instance.tofu_dev_3.id
-      public_ip  = aws_instance.tofu_dev_3.public_ip
-      private_ip = aws_instance.tofu_dev_3.private_ip
-      az         = aws_instance.tofu_dev_3.availability_zone
+      id         = aws_instance.tofu_dev_3[0].id
+      public_ip  = aws_instance.tofu_dev_3[0].public_ip
+      private_ip = aws_instance.tofu_dev_3[0].private_ip
+      az         = aws_instance.tofu_dev_3[0].availability_zone
     }
-  }
+  } : {}
 }

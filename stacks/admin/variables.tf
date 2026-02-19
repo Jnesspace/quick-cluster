@@ -1,3 +1,14 @@
+variable "cluster_type" {
+  type        = string
+  description = "Type of Kubernetes cluster: 'k3s' (self-managed on EC2) or 'eks' (AWS managed)"
+  default     = "k3s"
+
+  validation {
+    condition     = contains(["k3s", "eks"], var.cluster_type)
+    error_message = "cluster_type must be either 'k3s' or 'eks'"
+  }
+}
+
 variable "aws_integration_id" {
   type        = string
   description = "The AWS Integration to use for child stacks."
