@@ -3,7 +3,7 @@
 This stack provisions EC2 instances and emits normalized inventory data for the Ansible stack.
 
 ## Function
-
+bump
 - Provision EC2 instances using OpenTofu
 - Normalize host data via the `tofusible_host` module
 - Output inventory in a structure consumable by the Ansible dynamic inventory
