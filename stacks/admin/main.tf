@@ -55,7 +55,8 @@ locals {
 }
 
 module "stack_opentofu" {
-  source = "spacelift.io/spacelift-solutions/stacks-module/spacelift"
+  source  = "spacelift.io/spacelift-solutions/stacks-module/spacelift"
+  version = "~> 3.1"
 
   description     = "Stack that creates EC2 Servers"
   name            = "${local.unique_prefix}TofusibleKube-OpenTofu"
@@ -148,8 +149,9 @@ module "stack_opentofu" {
 
 # Ansible stack is only created for k3s (installs k3s on EC2 instances)
 module "stack_ansible" {
-  count  = local.is_k3s ? 1 : 0
-  source = "spacelift.io/spacelift-solutions/stacks-module/spacelift"
+  count   = local.is_k3s ? 1 : 0
+  source  = "spacelift.io/spacelift-solutions/stacks-module/spacelift"
+  version = "~> 3.1"
 
   description     = "Stack that configures EC2 servers"
   name            = "${local.unique_prefix}TofusibleKube-Ansible"
