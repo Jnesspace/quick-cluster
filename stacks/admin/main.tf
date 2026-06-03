@@ -308,7 +308,7 @@ resource "spacelift_stack" "tofusible-kubernetes" {
 
   labels = ["${local.run_tag}-kubernetes"]
   enable_well_known_secret_masking = true
-  github_action_deploy = false
+  allow_run_promotion = false
 
   # Use default worker pool for Kubernetes stack if provided
   worker_pool_id = var.worker_pool_id
