@@ -22,13 +22,13 @@ variable "resource_space_id" {
 variable "ansible_worker_pool_id" {
   type        = string
   description = "The worker pool ID to use for ansible jobs."
-  default     = null  # Use public worker pool
+  default     = null # Use public worker pool
 }
 
 variable "worker_pool_id" {
   type        = string
   description = "The worker pool ID to use for all stacks."
-  default     = null  # Use public worker pool
+  default     = null # Use public worker pool
 }
 
 variable "subnet_id" {
@@ -105,4 +105,73 @@ variable "kubernetes_runner_image" {
   type        = string
   description = "Docker image to use for the Kubernetes stack runner"
   default     = "public.ecr.aws/o6n6e5l1/jakeskuberneteshelmrunner:latest"
+}
+
+#──────────────────────────────────────────────────────────────────────────────
+# KEDA worker-pool autoscaling
+#
+# When enable_worker_autoscaling is true (and deploy_private_workers > 0) the
+# Kubernetes stack installs the Spacelift Prometheus exporter, kube-prometheus-stack
+# and KEDA, then scales the WorkerPool between min_workers and max_workers based on
+# the spacelift_worker_pool_runs_pending queue-depth metric.
+#──────────────────────────────────────────────────────────────────────────────
+variable "enable_worker_autoscaling" {
+  type        = bool
+  description = "Autoscale the private worker pool with KEDA based on Spacelift queue depth."
+  default     = false
+}
+
+variable "min_workers" {
+  type        = number
+  description = "Minimum number of workers KEDA keeps running (0 = scale to zero when idle)."
+  default     = 1
+
+  validation {
+    condition     = var.min_workers >= 0
+    error_message = "min_workers must be >= 0"
+  }
+}
+
+variable "max_workers" {
+  type        = number
+  description = "Maximum number of workers KEDA will scale the pool up to."
+  default     = 3
+
+  validation {
+    condition     = var.max_workers >= 1
+    error_message = "max_workers must be >= 1"
+  }
+}
+
+variable "spacelift_api_endpoint" {
+  type        = string
+  description = "Spacelift API endpoint for the Prometheus exporter (e.g. https://my-account.app.spacelift.io). Leave blank to derive it from the current account name."
+  default     = ""
+}
+
+variable "eks_cluster_version" {
+  type        = string
+  description = "Kubernetes version for the EKS control plane and managed nodes (eks cluster_type only)."
+  default     = "1.35"
+}
+
+#──────────────────────────────────────────────────────────────────────────────
+# Self-hosted Spacelift (optional)
+#
+# When enabled, the Kubernetes stack installs the vendored self-hosted Spacelift
+# umbrella chart (app + in-cluster MinIO + Postgres) plus ingress-nginx and
+# cert-manager. Recommended only with cluster_type = eks (it needs real compute,
+# which Karpenter provides). Secrets/license are supplied out-of-band via a
+# mounted values-secrets.yaml on the auto-created secrets context.
+#──────────────────────────────────────────────────────────────────────────────
+variable "enable_selfhosted" {
+  type        = bool
+  description = "Install a full self-hosted Spacelift instance on the cluster."
+  default     = false
+}
+
+variable "selfhosted_acme_email" {
+  type        = string
+  description = "Email for the Let's Encrypt ClusterIssuer used by the self-hosted ingress (blank = skip issuer; bring your own TLS)."
+  default     = ""
 }

@@ -1,0 +1,11 @@
+# Patterns to ignore when packaging the chart.
+.git/
+.github/
+.claude/
+scripts/
+values-secrets.yaml
+.env
+.DS_Store
+.idea/
+.vscode/
+*.bak

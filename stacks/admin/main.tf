@@ -46,12 +46,12 @@ locals {
   auto_prefix = var.stack_prefix != "" ? var.stack_prefix : "tofusible-${random_string.prefix_suffix[0].result}"
   name_prefix = "${local.auto_prefix}-"
 
-  unique_tag = var.run_tag != "" ? var.run_tag : random_string.name_suffix[0].result
+  unique_tag    = var.run_tag != "" ? var.run_tag : random_string.name_suffix[0].result
   unique_prefix = "${local.name_prefix}${local.unique_tag}-"
   run_tag       = trimsuffix(local.unique_prefix, "-")
   # RFC 1123 compliant name for Kubernetes resources (lowercase, alphanumeric, hyphens)
-  run_tag_k8s   = lower(local.run_tag)
-  bucket_name   = lower(replace(local.unique_prefix, "-", ""))
+  run_tag_k8s = lower(local.run_tag)
+  bucket_name = lower(replace(local.unique_prefix, "-", ""))
 }
 
 module "stack_opentofu" {
@@ -60,7 +60,7 @@ module "stack_opentofu" {
 
   description     = "Stack that creates EC2 Servers"
   name            = "${local.unique_prefix}TofusibleKube-OpenTofu"
-  repository_name = "Quick-Cluster"  #UPDATE_TO_YOUR_VALUE
+  repository_name = "Quick-Cluster" #UPDATE_TO_YOUR_VALUE
   space_id        = var.resource_space_id
 
   auto_deploy = true
@@ -92,6 +92,12 @@ module "stack_opentofu" {
     # AWS region for EKS kubeconfig
     TF_VAR_aws_default_region = {
       value     = var.aws_default_region
+      sensitive = false
+    }
+
+    # EKS Kubernetes version (eks cluster_type only)
+    TF_VAR_eks_cluster_version = {
+      value     = var.eks_cluster_version
       sensitive = false
     }
 
@@ -147,6 +153,19 @@ module "stack_opentofu" {
   worker_pool_id = var.worker_pool_id
 }
 
+# Kick off the chain automatically once the admin stack applies.
+# This triggers the OpenTofu stack, which then cascades to Ansible (via the
+# dependencies reference below) and Kubernetes (via spacelift_stack_dependency),
+# all auto-deploying. A new run fires only when run_tag changes (i.e. per
+# deployment), so re-applying the admin stack does not re-trigger the chain.
+resource "spacelift_run" "bootstrap_opentofu" {
+  stack_id = module.stack_opentofu.id
+
+  keepers = {
+    run_tag = local.run_tag
+  }
+}
+
 # Ansible stack is only created for k3s (installs k3s on EC2 instances)
 module "stack_ansible" {
   count   = local.is_k3s ? 1 : 0
@@ -155,7 +174,7 @@ module "stack_ansible" {
 
   description     = "Stack that configures EC2 servers"
   name            = "${local.unique_prefix}TofusibleKube-Ansible"
-  repository_name = "Quick-Cluster"  #UPDATE_TO_YOUR_VALUE
+  repository_name = "Quick-Cluster" #UPDATE_TO_YOUR_VALUE
   space_id        = var.resource_space_id
 
   auto_deploy = true
@@ -251,7 +270,7 @@ resource "aws_s3_bucket" "kubeconfig_storage" {
   # Allow Terraform to delete the bucket even if it still contains
   # versioned objects (required because we enabled versioning below).
   force_destroy = true
-  
+
   tags = {
     Name        = "TofusibleKube Kubeconfig Storage"
     Environment = "dev"
@@ -265,7 +284,7 @@ resource "random_id" "bucket_suffix" {
 
 resource "aws_s3_bucket_versioning" "kubeconfig_versioning" {
   bucket = aws_s3_bucket.kubeconfig_storage.id
-  
+
   versioning_configuration {
     status = "Enabled"
   }
@@ -281,11 +300,49 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "kubeconfig_encryp
   }
 }
 
+# This bucket holds the kubeconfig, worker-pool token/private-key and the
+# Prometheus-exporter API key secret, so lock it down: no public access and
+# TLS-only requests.
+resource "aws_s3_bucket_public_access_block" "kubeconfig_storage" {
+  bucket = aws_s3_bucket.kubeconfig_storage.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_policy" "kubeconfig_storage_tls_only" {
+  bucket = aws_s3_bucket.kubeconfig_storage.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "DenyInsecureTransport"
+      Effect    = "Deny"
+      Principal = "*"
+      Action    = "s3:*"
+      Resource = [
+        aws_s3_bucket.kubeconfig_storage.arn,
+        "${aws_s3_bucket.kubeconfig_storage.arn}/*",
+      ]
+      Condition = {
+        Bool = {
+          "aws:SecureTransport" = "false"
+        }
+      }
+    }]
+  })
+
+  # Ensure the public access block is applied before attaching a bucket policy.
+  depends_on = [aws_s3_bucket_public_access_block.kubeconfig_storage]
+}
+
 # Output S3 bucket information
 output "kubeconfig_s3_info" {
   value = {
-    bucket_name = aws_s3_bucket.kubeconfig_storage.bucket
-    latest_url  = "s3://${aws_s3_bucket.kubeconfig_storage.bucket}/kubeconfig-latest.yaml"
+    bucket_name      = aws_s3_bucket.kubeconfig_storage.bucket
+    latest_url       = "s3://${aws_s3_bucket.kubeconfig_storage.bucket}/kubeconfig-latest.yaml"
     download_command = "aws s3 cp s3://${aws_s3_bucket.kubeconfig_storage.bucket}/kubeconfig-latest.yaml ~/home/spacelift/.kube/config"
   }
   description = "S3 bucket information for kubeconfig storage"
@@ -294,11 +351,11 @@ output "kubeconfig_s3_info" {
 
 
 resource "spacelift_stack" "tofusible-kubernetes" {
-  name         = "${local.unique_prefix}TofusibleKube-Kubernetes"
-  space_id     = var.resource_space_id
-  description  = "Stack that deploys hello world app to K3s cluster"
+  name        = "${local.unique_prefix}TofusibleKube-Kubernetes"
+  space_id    = var.resource_space_id
+  description = "Stack that deploys hello world app to K3s cluster"
 
-  repository   = "Quick-Cluster"  #UPDATE_TO_YOUR_VALUE
+  repository   = "Quick-Cluster" #UPDATE_TO_YOUR_VALUE
   branch       = var.repo_branch
   project_root = "stacks/kubernetes"
 
@@ -308,9 +365,14 @@ resource "spacelift_stack" "tofusible-kubernetes" {
 
   runner_image = var.kubernetes_runner_image
 
-  labels = ["${local.run_tag}-kubernetes"]
+  labels                           = ["${local.run_tag}-kubernetes"]
   enable_well_known_secret_masking = true
-  allow_run_promotion = false
+  allow_run_promotion              = false
+
+  # Auto-apply so the OpenTofu -> Ansible -> Kubernetes chain completes without
+  # manual confirmation once the admin stack runs (the OpenTofu/Ansible stacks
+  # already set auto_deploy = true). This is the final approval gate.
+  autodeploy = true
 
   # Use default worker pool for Kubernetes stack if provided
   worker_pool_id = var.worker_pool_id
@@ -343,6 +405,31 @@ resource "spacelift_environment_variable" "kubernetes_kubeconfig" {
   stack_id = spacelift_stack.tofusible-kubernetes.id
   name     = "KUBECONFIG"
   value    = "/home/spacelift/.kube/config"
+}
+
+# Self-hosted Spacelift toggle + ACME email, consumed by deploy-selfhosted.sh.
+resource "spacelift_environment_variable" "kubernetes_selfhosted_enabled" {
+  stack_id = spacelift_stack.tofusible-kubernetes.id
+  name     = "SELFHOSTED_ENABLED"
+  value    = tostring(var.enable_selfhosted)
+}
+
+resource "spacelift_environment_variable" "kubernetes_selfhosted_acme_email" {
+  stack_id = spacelift_stack.tofusible-kubernetes.id
+  name     = "SELFHOSTED_ACME_EMAIL"
+  value    = var.selfhosted_acme_email
+}
+
+# Context that carries the user-supplied self-hosted secrets/overrides. The admin
+# stack only creates the (auto-attached) context; the operator adds a mounted file
+# named "values-secrets.yaml" (license, admin/RSA/DB/MinIO secrets, domain, image
+# refs) in the Spacelift UI so secrets never touch git or Terraform state.
+resource "spacelift_context" "selfhosted_secrets" {
+  count       = var.enable_selfhosted ? 1 : 0
+  name        = "${local.unique_prefix}selfhosted-secrets"
+  description = "Add a mounted file 'values-secrets.yaml' here (see stacks/kubernetes/selfhosted/values-secrets.example.yaml) to configure the self-hosted Spacelift install."
+  space_id    = var.resource_space_id
+  labels      = ["autoattach:${local.run_tag}-kubernetes"]
 }
 
 # k3s: Kubernetes depends on Ansible (which installs k3s and uploads kubeconfig)
@@ -399,54 +486,17 @@ resource "spacelift_context" "kubeconfig_hooks" {
   ]
 
   # Runs after terraform apply / kubernetes apply
-  # Deploys Spacelift private workers if configured
+  # Deploys the Spacelift private worker pool (and KEDA autoscaling when enabled).
+  # The heavy lifting lives in a checked-in, testable script; this hook just
+  # points KUBECONFIG at the downloaded config and runs it. The script no-ops
+  # when no worker pool was configured for this deployment.
   after_apply = [
-    # Ensure KUBECONFIG points to where we downloaded the config
-    "export KUBECONFIG=/mnt/workspace/.kube/config",
-
-    # Check if worker pool deployment is enabled
-    "echo '🔍 Checking for worker pool configuration...'",
-    "if aws s3 ls \"s3://$KUBECONFIG_S3_BUCKET/worker-pool/config.json\" 2>/dev/null; then echo '✅ Worker pool deployment enabled'; else echo 'ℹ️  No worker pool configuration found, skipping worker deployment'; exit 0; fi",
-
-    # Download worker pool credentials
-    "mkdir -p /tmp/worker-pool",
-    "aws s3 cp s3://$KUBECONFIG_S3_BUCKET/worker-pool/token /tmp/worker-pool/token",
-    "aws s3 cp s3://$KUBECONFIG_S3_BUCKET/worker-pool/private-key /tmp/worker-pool/privateKey",
-    "aws s3 cp s3://$KUBECONFIG_S3_BUCKET/worker-pool/config.json /tmp/worker-pool/config.json",
-
-    # Parse config using python (available on Spacelift workers)
-    "export POOL_NAME=$(cat /tmp/worker-pool/config.json | python3 -c \"import sys,json; print(json.load(sys.stdin)['pool_name'])\")",
-    "export POOL_SIZE=$(cat /tmp/worker-pool/config.json | python3 -c \"import sys,json; print(json.load(sys.stdin)['pool_size'])\")",
-    "export NAMESPACE='spacelift-worker-controller-system'",
-    "echo \"📦 Deploying worker pool: $POOL_NAME with $POOL_SIZE workers\"",
-
-    # Install Spacelift worker controller via Helm
-    "echo '📦 Installing Spacelift worker controller via Helm...'",
-    "helm repo add spacelift https://downloads.spacelift.io/helm 2>/dev/null || true",
-    "helm repo update spacelift",
-    "helm upgrade --install spacelift-worker-controller spacelift/spacelift-workerpool-controller --namespace \"$NAMESPACE\" --create-namespace --wait --timeout 5m",
-
-    # Wait for WorkerPool CRD to be established
-    "echo '⏳ Waiting for WorkerPool CRD to be established...'",
-    "kubectl wait --for=condition=Established crd/workerpools.workers.spacelift.io --timeout=180s",
-
-    # Create Kubernetes secret with worker pool credentials
-    "echo '🔐 Creating worker pool secret...'",
-    "kubectl create secret generic \"$POOL_NAME\" --namespace=\"$NAMESPACE\" --from-file=token=/tmp/worker-pool/token --from-file=privateKey=/tmp/worker-pool/privateKey --dry-run=client -o yaml | kubectl apply -f -",
-
-    # Apply WorkerPool CRD
-    "echo '🚀 Deploying WorkerPool resource...'",
-    "printf 'apiVersion: workers.spacelift.io/v1beta1\nkind: WorkerPool\nmetadata:\n  name: %s\n  namespace: %s\nspec:\n  poolSize: %s\n  token:\n    secretKeyRef:\n      name: %s\n      key: token\n  privateKey:\n    secretKeyRef:\n      name: %s\n      key: privateKey\n' \"$POOL_NAME\" \"$NAMESPACE\" \"$POOL_SIZE\" \"$POOL_NAME\" \"$POOL_NAME\" | kubectl apply -f -",
-
-    # Verify deployment
-    "echo '✅ Worker pool deployed! Verifying...'",
-    "kubectl -n \"$NAMESPACE\" get workerpools",
-    "kubectl -n \"$NAMESPACE\" get pods",
-
-    # Cleanup temp files
-    "rm -rf /tmp/worker-pool",
-
-    "echo '🎉 Private workers will connect to Spacelift shortly'",
+    # Karpenter first (EKS only; no-ops on k3s) so node capacity is elastic before
+    # the worker/monitoring workloads below need scheduling.
+    "KUBECONFIG=/mnt/workspace/.kube/config bash /mnt/workspace/stacks/kubernetes/scripts/deploy-karpenter.sh",
+    "KUBECONFIG=/mnt/workspace/.kube/config bash /mnt/workspace/stacks/kubernetes/scripts/deploy-workers-keda.sh",
+    # Optional full self-hosted Spacelift install (no-ops unless SELFHOSTED_ENABLED=true).
+    "KUBECONFIG=/mnt/workspace/.kube/config bash /mnt/workspace/stacks/kubernetes/scripts/deploy-selfhosted.sh",
   ]
 }
 

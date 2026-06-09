@@ -1,0 +1,25 @@
+# Set by the parent chart under the `postgres:` key.
+# Disable this and point spacelift at an external DB via objectStorage/database overrides.
+enabled: true
+
+image: postgres:16-alpine
+imagePullPolicy: IfNotPresent
+
+auth:
+  username: spacelift
+  database: spacelift
+  password: "" # MUST be set via Helmfile (POSTGRES_PASSWORD)
+
+persistence:
+  size: 10Gi
+  storageClass: "" # empty = cluster default StorageClass (local-path on k3s)
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

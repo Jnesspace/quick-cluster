@@ -1,0 +1,225 @@
+# =============================================================================
+# Spacelift self-hosted — all-in-one chart values
+#
+# Defaults target a small k3s cluster (single replicas, in-cluster MinIO +
+# Postgres on PVCs). Override the REQUIRED section, then:
+#
+#   helm dependency build
+#   helm install spacelift . -n spacelift --create-namespace \
+#     -f my-values.yaml
+#
+# See values-secrets.example.yaml for the minimal set you must provide.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# REQUIRED — no safe defaults
+# -----------------------------------------------------------------------------
+license:
+  token: "" # JWT license from Spacelift
+
+admin:
+  username: admin
+  password: "" # initial admin password
+
+encryption:
+  # Base64-encoded RSA private key. Generate with: ./scripts/gen-rsa-key.sh
+  rsaPrivateKey: ""
+
+# Launcher image (used by the drain to spawn run pods). Repo + tag are separate
+# because they are passed to the launcher as distinct fields.
+launcher:
+  image: "" # e.g. your-registry.example.com/spacelift-launcher
+  tag: "v4.0.0"
+
+# Public URL MinIO is reachable on from browsers/workers (presigned URLs).
+# Usually https://minio.<your-domain>. Required even with bundled MinIO.
+objectStorage:
+  publicUrl: "" # e.g. https://minio.spacelift.example.com
+  # In-cluster MinIO is reached over plaintext, so these stay false.
+  useSSL: false
+  allowInsecure: false
+  # Only used when minio.enabled=false (external object storage):
+  endpoint: ""
+  accessKeyId: ""
+  secretAccessKey: ""
+
+# Only used when postgres.enabled=false (external database). Keep
+# statement_cache_capacity=0 (required by Spacelift's pgx driver).
+database:
+  url: ""
+
+# -----------------------------------------------------------------------------
+# Spacelift application (subchart: spacelift-self-hosted, aliased "spacelift")
+# Scale by bumping the replicaCount values below.
+# -----------------------------------------------------------------------------
+spacelift:
+  shared:
+    serverHostname: spacelift.example.com
+    # Full backend image reference (repo:tag).
+    image: your-registry.example.com/spacelift-backend:v4.0.0
+    secretRef: spacelift-shared
+
+  server:
+    secretRef: spacelift-server
+    replicaCount: 1 # scale up under load
+    resources:
+      requests:
+        memory: "200Mi"
+        cpu: "200m"
+
+  drain:
+    secretRef: spacelift-drain
+    replicaCount: 1 # scale up under load
+    resources:
+      requests:
+        memory: "100Mi"
+        cpu: "100m"
+
+  scheduler:
+    replicaCount: 1 # keep at 1 (emits recurring tasks)
+    resources:
+      requests:
+        memory: "50Mi"
+        cpu: "50m"
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  mqttService:
+    type: ClusterIP
+    port: 1984
+
+  ingress:
+    enabled: true
+    ingressClassName: nginx # k3s default controller is "traefik" — see README
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-body-size: "0"
+      # If using cert-manager, point this at your ClusterIssuer (the ingress
+      # expects a TLS secret named "cert"):
+      # cert-manager.io/cluster-issuer: letsencrypt
+
+  # Most k3s clusters are IPv4-only.
+  ingressV6:
+    enabled: false
+
+# -----------------------------------------------------------------------------
+# Autoscaling (HPA) for the Spacelift app instance.
+#
+# The upstream chart has no HPA, so these are added by this chart. Requires
+# metrics-server (k3s bundles it). The scheduler is intentionally not
+# autoscaled. When you enable an HPA, set that component's replicaCount above to
+# its minReplicas (helm upgrade resets replicas, then the HPA scales from there).
+# -----------------------------------------------------------------------------
+autoscaling:
+  server:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: null # set e.g. 80 to also scale on memory
+    behavior: {} # optional HPA scaling behavior (scaleUp/scaleDown policies)
+  drain:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: null
+    behavior: {}
+
+# -----------------------------------------------------------------------------
+# Object storage (subchart: minio) — single-instance, PVC-backed.
+# Set minio.enabled=false to use external object storage (fill objectStorage.*).
+# -----------------------------------------------------------------------------
+minio:
+  enabled: true
+  fullnameOverride: minio # keeps the in-cluster service name predictable
+  mode: standalone
+  replicas: 1
+
+  rootUser: minioadmin
+  rootPassword: "" # set me
+
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: "" # "" = cluster default (local-path on k3s); set EBS class on AWS
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+  environment:
+    # Browsers upload/download directly via presigned URLs, so allow the origin.
+    MINIO_API_CORS_ALLOW_ORIGIN: "*"
+
+  # Dedicated S3 credentials handed to Spacelift (username = access key id).
+  users:
+    - accessKey: spacelift
+      secretKey: "" # set me
+      policy: readwrite
+
+  # Required buckets (matches the Spacelift reference). Versioning on the ones
+  # that benefit from point-in-time recovery.
+  buckets:
+    - { name: spacelift-binaries, policy: none, purge: false, versioning: true }
+    - { name: spacelift-deliveries, policy: none, purge: false, versioning: false }
+    - { name: spacelift-large-queue-messages, policy: none, purge: false, versioning: false }
+    - { name: spacelift-metadata, policy: none, purge: false, versioning: false }
+    - { name: spacelift-modules, policy: none, purge: false, versioning: true }
+    - { name: spacelift-policy-inputs, policy: none, purge: false, versioning: true }
+    - { name: spacelift-run-logs, policy: none, purge: false, versioning: true }
+    - { name: spacelift-states, policy: none, purge: false, versioning: true }
+    - { name: spacelift-uploads, policy: none, purge: false, versioning: true }
+    - { name: spacelift-user-uploaded-workspaces, policy: none, purge: false, versioning: true }
+    - { name: spacelift-workspaces, policy: none, purge: false, versioning: true }
+
+  # Object expiration to keep storage (and cost) bounded. mc target is "myminio".
+  # NOTE: needs a recent mc (`ilm rule add`). Older images use `ilm add --expiry-days`.
+  customCommands:
+    - command: "ilm rule add --expire-days 1 myminio/spacelift-deliveries"
+    - command: "ilm rule add --expire-days 2 myminio/spacelift-large-queue-messages"
+    - command: "ilm rule add --expire-days 2 myminio/spacelift-metadata"
+    - command: "ilm rule add --expire-days 120 myminio/spacelift-policy-inputs"
+    - command: "ilm rule add --expire-days 60 myminio/spacelift-run-logs"
+    - command: "ilm rule add --expire-days 1 myminio/spacelift-uploads"
+    - command: "ilm rule add --expire-days 1 myminio/spacelift-user-uploaded-workspaces"
+    - command: "ilm rule add --expire-days 90 myminio/spacelift-workspaces"
+
+  # Expose the S3 API outside the cluster (for presigned URLs).
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    path: /
+    hosts:
+      - minio.spacelift.example.com
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-body-size: "0"
+      # cert-manager.io/cluster-issuer: letsencrypt
+    tls:
+      - secretName: minio-tls
+        hosts:
+          - minio.spacelift.example.com
+
+  consoleIngress:
+    enabled: false
+
+# -----------------------------------------------------------------------------
+# Database (local subchart: charts/postgres) — single-instance, PVC-backed.
+# Set postgres.enabled=false to use an external DB (fill database.url).
+# -----------------------------------------------------------------------------
+postgres:
+  enabled: true
+  image: postgres:16-alpine
+  auth:
+    username: spacelift
+    database: spacelift
+    password: "" # set me
+  persistence:
+    size: 10Gi
+    storageClass: "" # "" = cluster default
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi

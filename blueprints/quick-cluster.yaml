@@ -23,6 +23,12 @@ inputs:
     description: "AWS region (e.g., eu-west-1)"
     type: short_text
 
+  - id: eks_cluster_version
+    name: EKS Kubernetes Version
+    description: "Kubernetes version for the EKS control plane and nodes (only used when Cluster Type = eks)"
+    type: short_text
+    default: "1.35"
+
 
   - id: worker_pool_id
     name: Worker Pool ID for All Stacks (optional)
@@ -32,7 +38,7 @@ inputs:
 
   - id: deploy_private_workers
     name: Deploy Private Workers to Cluster
-    description: "Number of Spacelift private workers to deploy to the K3s cluster (0 = disabled)"
+    description: "Number of Spacelift private workers to deploy to the cluster (0 = disabled). When autoscaling is enabled this is the static fallback size; min/max below take over."
     type: select
     options:
       - "0"
@@ -47,6 +53,42 @@ inputs:
       - "9"
       - "10"
     default: "0"
+
+  - id: enable_worker_autoscaling
+    name: Autoscale Worker Pool (KEDA)
+    description: "Autoscale the private worker pool with KEDA based on Spacelift queue depth. Requires deploy_private_workers >= 1. Installs the Spacelift Prometheus exporter, kube-prometheus-stack and KEDA into the cluster."
+    type: select
+    options:
+      - "false"
+      - "true"
+    default: "false"
+
+  - id: min_workers
+    name: Min Workers (autoscaling)
+    description: "Minimum workers KEDA keeps running (0 = scale to zero when the queue is empty)"
+    type: short_text
+    default: "1"
+
+  - id: max_workers
+    name: Max Workers (autoscaling)
+    description: "Maximum workers KEDA will scale the pool up to"
+    type: short_text
+    default: "3"
+
+  - id: enable_selfhosted
+    name: Install Self-Hosted Spacelift
+    description: "Install a full self-hosted Spacelift instance (app + in-cluster MinIO + Postgres + ingress-nginx + cert-manager). Recommended only with Cluster Type = eks. Requires a 'values-secrets.yaml' mounted file (license/secrets) on the auto-created secrets context."
+    type: select
+    options:
+      - "false"
+      - "true"
+    default: "false"
+
+  - id: selfhosted_acme_email
+    name: Self-Hosted ACME Email (optional)
+    description: "Email for the Let's Encrypt ClusterIssuer used by the self-hosted ingress. Leave blank to bring your own TLS."
+    type: short_text
+    default: ""
 
 
 
@@ -136,10 +178,22 @@ stack:
         value: ${{ inputs.resource_space_id }}
       - name: TF_VAR_aws_default_region
         value: ${{ inputs.aws_default_region }}
+      - name: TF_VAR_eks_cluster_version
+        value: ${{ inputs.eks_cluster_version }}
       - name: TF_VAR_worker_pool_id
         value: ${{ inputs.worker_pool_id }}
       - name: TF_VAR_deploy_private_workers
         value: "${{ inputs.deploy_private_workers }}"
+      - name: TF_VAR_enable_worker_autoscaling
+        value: "${{ inputs.enable_worker_autoscaling }}"
+      - name: TF_VAR_min_workers
+        value: "${{ inputs.min_workers }}"
+      - name: TF_VAR_max_workers
+        value: "${{ inputs.max_workers }}"
+      - name: TF_VAR_enable_selfhosted
+        value: "${{ inputs.enable_selfhosted }}"
+      - name: TF_VAR_selfhosted_acme_email
+        value: ${{ inputs.selfhosted_acme_email }}
       - name: TF_VAR_instance_type
         value: ${{ inputs.instance_type }}
       - name: TF_VAR_root_volume_size

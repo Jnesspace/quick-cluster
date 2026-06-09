@@ -84,6 +84,37 @@ variable "subnet_id" {
   default     = null
 }
 
+# EKS-only knobs (ignored for k3s)
+variable "eks_cluster_version" {
+  type        = string
+  description = "Kubernetes version for the EKS control plane and managed nodes."
+  default     = "1.35"
+}
+
+variable "eks_system_instance_type" {
+  type        = string
+  description = "Instance type for the small EKS managed 'system' node group that bootstraps Karpenter and runs system pods. Workload capacity is provided elastically by Karpenter."
+  default     = "m5.large"
+}
+
+variable "karpenter_version" {
+  type        = string
+  description = "Karpenter Helm chart version installed into the EKS cluster."
+  default     = "1.12.1"
+}
+
+variable "cluster_access_cidr" {
+  type        = string
+  description = "CIDR allowed to reach the k3s nodes' SSH (22), Kubernetes API (6443) and NodePort range. Defaults to the whole internet to keep public Spacelift workers working; narrow it to your IP/range (or your private worker egress) to harden. NOTE: agents join the server over its public IP, so this must include the nodes' own public IPs if narrowed."
+  default     = "0.0.0.0/0"
+}
+
+variable "eks_public_access_cidrs" {
+  type        = list(string)
+  description = "CIDRs allowed to reach the EKS public API endpoint. Defaults to open so public Spacelift workers can reach it; narrow to your worker egress / admin IPs to harden (private endpoint access stays on regardless)."
+  default     = ["0.0.0.0/0"]
+}
+
 provider "aws" {}
 
 # --- Added: default VPC lookup and optional subnet creation -------------------
@@ -97,8 +128,8 @@ data "aws_vpc" "default" {
 # count is zero, so **no subnet is created** and downstream references to
 # `aws_subnet.generated[0]` are ignored by conditionals.
 resource "aws_subnet" "generated" {
-  count                   = var.create_new_subnet ? 1 : 0
-  vpc_id                  = data.aws_vpc.default.id
+  count  = var.create_new_subnet ? 1 : 0
+  vpc_id = data.aws_vpc.default.id
   # Choose a /24 far away from the typical default /20 ranges (0,16,32,48, etc.)
   cidr_block              = cidrsubnet(data.aws_vpc.default.cidr_block, 8, 200) # 172.31.200.0/24 within default VPC
   map_public_ip_on_launch = true
@@ -128,7 +159,7 @@ resource "aws_security_group" "tofusible_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.cluster_access_cidr]
   }
 
   # Kubernetes API server
@@ -137,7 +168,7 @@ resource "aws_security_group" "tofusible_sg" {
     from_port   = 6443
     to_port     = 6443
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.cluster_access_cidr]
   }
 
   # K3s server port (for agent registration)
@@ -173,7 +204,7 @@ resource "aws_security_group" "tofusible_sg" {
     from_port   = 30000
     to_port     = 32767
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.cluster_access_cidr]
   }
 
   # All traffic within security group
@@ -277,6 +308,14 @@ resource "aws_instance" "tofu_dev_1" {
     encrypted             = true
   }
 
+  # Enforce IMDSv2 (token-required) to mitigate SSRF-based metadata/credential theft.
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 2
+    instance_metadata_tags      = "disabled"
+  }
+
   # Force recreation on each deployment
   lifecycle {
     replace_triggered_by = [
@@ -306,6 +345,14 @@ resource "aws_instance" "tofu_dev_2" {
     volume_type           = var.root_volume_type
     delete_on_termination = true
     encrypted             = true
+  }
+
+  # Enforce IMDSv2 (token-required) to mitigate SSRF-based metadata/credential theft.
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 2
+    instance_metadata_tags      = "disabled"
   }
 
   # Force recreation on each deployment
@@ -339,6 +386,14 @@ resource "aws_instance" "tofu_dev_3" {
     encrypted             = true
   }
 
+  # Enforce IMDSv2 (token-required) to mitigate SSRF-based metadata/credential theft.
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 2
+    instance_metadata_tags      = "disabled"
+  }
+
   # Force recreation on each deployment
   lifecycle {
     replace_triggered_by = [
@@ -367,9 +422,9 @@ module "host_tofu_dev_1" {
   ssh_private_key_file = var.private_key_path
   groups               = ["tofu", "dev", "k8s_nodes"]
   extra_vars = {
-    node_role    = "k8s-node-1"
-    private_ip   = aws_instance.tofu_dev_1[0].private_ip
-    instance_id  = aws_instance.tofu_dev_1[0].id
+    node_role   = "k8s-node-1"
+    private_ip  = aws_instance.tofu_dev_1[0].private_ip
+    instance_id = aws_instance.tofu_dev_1[0].id
   }
 }
 
@@ -383,9 +438,9 @@ module "host_tofu_dev_2" {
   ssh_private_key_file = var.private_key_path
   groups               = ["tofu", "dev", "k8s_nodes"]
   extra_vars = {
-    node_role    = "k8s-node-2"
-    private_ip   = aws_instance.tofu_dev_2[0].private_ip
-    instance_id  = aws_instance.tofu_dev_2[0].id
+    node_role   = "k8s-node-2"
+    private_ip  = aws_instance.tofu_dev_2[0].private_ip
+    instance_id = aws_instance.tofu_dev_2[0].id
   }
 }
 
@@ -399,9 +454,9 @@ module "host_tofu_dev_3" {
   ssh_private_key_file = var.private_key_path
   groups               = ["tofu", "dev", "k8s_nodes"]
   extra_vars = {
-    node_role    = "k8s-node-3"
-    private_ip   = aws_instance.tofu_dev_3[0].private_ip
-    instance_id  = aws_instance.tofu_dev_3[0].id
+    node_role   = "k8s-node-3"
+    private_ip  = aws_instance.tofu_dev_3[0].private_ip
+    instance_id = aws_instance.tofu_dev_3[0].id
   }
 }
 
@@ -428,16 +483,16 @@ output "inventory_tofu" {
 # Output AWS information for reference
 output "aws_info" {
   value = {
-    cluster_type        = var.cluster_type
-    vpc_id              = local.vpc_id_final
-    vpc_cidr_block      = (
+    cluster_type = var.cluster_type
+    vpc_id       = local.vpc_id_final
+    vpc_cidr_block = (
       var.subnet_id != null && var.subnet_id != ""
     ) ? data.aws_subnet.selected[0].cidr_block : data.aws_subnet.default_selected[0].cidr_block
-    subnet_id           = local.subnet_id_final
-    subnet_cidr_block   = (
+    subnet_id = local.subnet_id_final
+    subnet_cidr_block = (
       var.subnet_id != null && var.subnet_id != ""
     ) ? data.aws_subnet.selected[0].cidr_block : data.aws_subnet.default_selected[0].cidr_block
-    availability_zone   = (
+    availability_zone = (
       var.subnet_id != null && var.subnet_id != ""
     ) ? data.aws_subnet.selected[0].availability_zone : data.aws_subnet.default_selected[0].availability_zone
     security_group_id   = local.is_k3s ? aws_security_group.tofusible_sg[0].id : null

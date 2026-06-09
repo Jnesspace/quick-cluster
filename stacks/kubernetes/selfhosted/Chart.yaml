@@ -1,0 +1,21 @@
+apiVersion: v2
+name: spacelift-selfhosted
+description: >-
+  All-in-one umbrella chart for running Spacelift self-hosted on a small
+  (e.g. k3s) cluster: the Spacelift app (server/drain/scheduler/MQTT) plus an
+  in-cluster MinIO (object storage) and PostgreSQL, wired together with the
+  required secrets. One `helm install`.
+type: application
+version: 0.1.0
+appVersion: "4.0.0"
+
+dependencies:
+  - name: spacelift-self-hosted
+    version: "0.64.0"
+    repository: https://downloads.spacelift.io/helm
+    alias: spacelift
+  - name: minio
+    version: "5.4.0"
+    repository: https://charts.min.io/
+    condition: minio.enabled
+  # postgres is a local subchart vendored under charts/postgres (toggled via postgres.enabled).

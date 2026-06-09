@@ -1,0 +1,39 @@
+Spacelift self-hosted has been deployed to namespace "{{ .Release.Namespace }}".
+
+Components:
+  - server     ({{ .Values.spacelift.server.replicaCount }} replica/s)
+  - drain      ({{ .Values.spacelift.drain.replicaCount }} replica/s)
+  - scheduler  ({{ .Values.spacelift.scheduler.replicaCount }} replica/s)
+{{- if .Values.minio.enabled }}
+  - minio      (object storage, in-cluster)
+{{- end }}
+{{- if .Values.postgres.enabled }}
+  - postgres   (database, in-cluster)
+{{- end }}
+
+1. Watch rollout:
+     kubectl -n {{ .Release.Namespace }} get pods -w
+
+2. Point DNS at your ingress controller's external IP:
+     {{ .Values.spacelift.shared.serverHostname }}
+{{- if .Values.minio.enabled }}
+     {{ (index .Values.minio.ingress.hosts 0) }}
+{{- end }}
+
+3. Scale the app up/down at any time:
+     helm upgrade spacelift . -n {{ .Release.Namespace }} --reuse-values --skip-schema-validation \
+       --set spacelift.server.replicaCount=3 --set spacelift.drain.replicaCount=2
+   (or, immediate: kubectl -n {{ .Release.Namespace }} scale deploy/spacelift-server --replicas=3)
+{{- if or .Values.autoscaling.server.enabled .Values.autoscaling.drain.enabled }}
+
+   HPA autoscaling is ENABLED. Ensure metrics-server is running:
+     kubectl -n {{ .Release.Namespace }} get hpa
+{{- end }}
+
+4. Then complete first-time setup:
+     https://docs.spacelift.io/self-hosted/latest/installing-spacelift/reference-architecture/guides/first-setup.html
+
+{{- if not .Values.license.token }}
+
+WARNING: license.token is empty — the server will not start. Provide it via -f values-secrets.yaml.
+{{- end }}

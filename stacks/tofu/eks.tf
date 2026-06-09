@@ -9,15 +9,20 @@ module "eks" {
   version = "~> 20.0"
 
   cluster_name    = "${var.run_tag}-eks"
-  cluster_version = "1.28"
+  cluster_version = var.eks_cluster_version
 
   # Networking
   vpc_id     = local.vpc_id_final
   subnet_ids = data.aws_subnets.default_vpc.ids
 
-  # Cluster access - enable both API and ConfigMap for flexibility
-  cluster_endpoint_public_access = true
-  authentication_mode            = "API_AND_CONFIG_MAP"
+  # Cluster access - enable both API and ConfigMap for flexibility.
+  # Keep the private endpoint on; restrict who can reach the public endpoint via
+  # eks_public_access_cidrs (default open so public Spacelift workers still work —
+  # narrow it to your worker egress / admin IPs to harden).
+  cluster_endpoint_public_access       = true
+  cluster_endpoint_private_access      = true
+  cluster_endpoint_public_access_cidrs = var.eks_public_access_cidrs
+  authentication_mode                  = "API_AND_CONFIG_MAP"
 
   # Grant admin access to the IAM role used by Spacelift
   # This creates an access entry for the role that creates the cluster,
@@ -30,24 +35,46 @@ module "eks" {
   # Disable CloudWatch logging (control plane logs disabled)
   cluster_enabled_log_types = []
 
-  # Managed node groups (similar to k3s 3-node setup)
+  # Small managed "system" node group that bootstraps Karpenter and runs system
+  # pods (coredns, the Karpenter controller, monitoring operators). Actual
+  # workload capacity is provided elastically by Karpenter (see karpenter.tf), so
+  # this group stays intentionally small.
   eks_managed_node_groups = {
-    default = {
-      name           = "${var.run_tag}-nodes"
-      instance_types = [var.instance_type]
+    system = {
+      name           = "${var.run_tag}-system"
+      instance_types = [var.eks_system_instance_type]
 
-      min_size     = 3
+      min_size     = 2
       max_size     = 3
-      desired_size = 3
+      desired_size = 2
 
-      disk_size = var.root_volume_size
-
-      # Use the same AMI type as k3s (AL2023 is the modern default)
       ami_type = "AL2023_x86_64_STANDARD"
 
+      # Encrypted root volume (don't rely on account-level "encrypt by default").
+      block_device_mappings = {
+        xvda = {
+          device_name = "/dev/xvda"
+          ebs = {
+            volume_size           = var.root_volume_size
+            volume_type           = "gp3"
+            encrypted             = true
+            delete_on_termination = true
+          }
+        }
+      }
+
+      # Enforce IMDSv2 (the module defaults to this, but be explicit).
+      metadata_options = {
+        http_endpoint               = "enabled"
+        http_tokens                 = "required"
+        http_put_response_hop_limit = 2
+        instance_metadata_tags      = "disabled"
+      }
+
       labels = {
-        Environment = "dev"
-        ClusterType = "eks"
+        Environment               = "dev"
+        ClusterType               = "eks"
+        "karpenter.sh/controller" = "true"
       }
 
       tags = {
@@ -57,7 +84,10 @@ module "eks" {
     }
   }
 
-  # Cluster addons
+  # Cluster addons. eks-pod-identity-agent powers EKS Pod Identity (used by
+  # Karpenter and the EBS CSI driver); aws-ebs-csi-driver provides dynamic
+  # EBS-backed PersistentVolumes (needed by kube-prometheus-stack and the
+  # self-hosted Spacelift chart's in-cluster MinIO/Postgres).
   cluster_addons = {
     coredns = {
       most_recent = true
@@ -68,6 +98,16 @@ module "eks" {
     vpc-cni = {
       most_recent = true
     }
+    eks-pod-identity-agent = {
+      most_recent = true
+    }
+    aws-ebs-csi-driver = {
+      most_recent = true
+      pod_identity_association = [{
+        role_arn        = aws_iam_role.ebs_csi[0].arn
+        service_account = "ebs-csi-controller-sa"
+      }]
+    }
   }
 
   tags = {
@@ -75,6 +115,34 @@ module "eks" {
     ClusterType = "eks"
     RunTag      = var.run_tag
   }
+}
+
+#───────────────────────────────────────────────────────────────────────────────
+# IAM role for the EBS CSI driver, assumed via EKS Pod Identity.
+#───────────────────────────────────────────────────────────────────────────────
+resource "aws_iam_role" "ebs_csi" {
+  count = local.is_eks ? 1 : 0
+  name  = "${var.run_tag}-ebs-csi"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "pods.eks.amazonaws.com" }
+      Action    = ["sts:AssumeRole", "sts:TagSession"]
+    }]
+  })
+
+  tags = {
+    ClusterType = "eks"
+    RunTag      = var.run_tag
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "ebs_csi" {
+  count      = local.is_eks ? 1 : 0
+  role       = aws_iam_role.ebs_csi[0].name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
 }
 
 #───────────────────────────────────────────────────────────────────────────────
@@ -134,14 +202,14 @@ resource "aws_s3_object" "eks_kubeconfig" {
 
 output "eks_info" {
   value = local.is_eks ? {
-    cluster_name                   = module.eks[0].cluster_name
-    cluster_endpoint               = module.eks[0].cluster_endpoint
-    cluster_version                = module.eks[0].cluster_version
-    cluster_security_group_id      = module.eks[0].cluster_security_group_id
-    node_security_group_id         = module.eks[0].node_security_group_id
-    cluster_iam_role_arn           = module.eks[0].cluster_iam_role_arn
-    oidc_provider_arn              = module.eks[0].oidc_provider_arn
-    cluster_certificate_authority  = module.eks[0].cluster_certificate_authority_data
+    cluster_name                  = module.eks[0].cluster_name
+    cluster_endpoint              = module.eks[0].cluster_endpoint
+    cluster_version               = module.eks[0].cluster_version
+    cluster_security_group_id     = module.eks[0].cluster_security_group_id
+    node_security_group_id        = module.eks[0].node_security_group_id
+    cluster_iam_role_arn          = module.eks[0].cluster_iam_role_arn
+    oidc_provider_arn             = module.eks[0].oidc_provider_arn
+    cluster_certificate_authority = module.eks[0].cluster_certificate_authority_data
   } : null
   description = "EKS cluster information (only populated when cluster_type = eks)"
 }
@@ -149,9 +217,9 @@ output "eks_info" {
 output "eks_node_groups" {
   value = local.is_eks ? {
     for k, v in module.eks[0].eks_managed_node_groups : k => {
-      node_group_id          = v.node_group_id
-      node_group_arn         = v.node_group_arn
-      node_group_status      = v.node_group_status
+      node_group_id                      = v.node_group_id
+      node_group_arn                     = v.node_group_arn
+      node_group_status                  = v.node_group_status
       node_group_autoscaling_group_names = v.node_group_autoscaling_group_names
     }
   } : {}

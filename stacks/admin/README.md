@@ -58,7 +58,15 @@ aws ec2 describe-vpcs \
 | `TF_VAR_root_volume_size` | `20` | Root volume size in GB |
 | `TF_VAR_worker_pool_id` | `null` | Spacelift worker pool (null = public) |
 | `TF_VAR_deploy_private_workers` | `0` | Number of private workers (0-10) |
+| `TF_VAR_enable_worker_autoscaling` | `false` | Autoscale the worker pool with KEDA on Spacelift queue depth |
+| `TF_VAR_min_workers` | `1` | Min workers when autoscaling (0 = scale to zero) |
+| `TF_VAR_max_workers` | `3` | Max workers when autoscaling |
+| `TF_VAR_spacelift_api_endpoint` | `""` (derived) | Exporter API endpoint; blank = `https://<account>.app.spacelift.io` |
 | `TF_VAR_kubernetes_runner_image` | `public.ecr.aws/o6n6e5l1/jakeskuberneteshelmrunner:latest` | Runner image for Kubernetes stack |
+
+> **Note:** When `enable_worker_autoscaling = true` the admin stack creates a `spacelift_api_key`
+> for the Prometheus exporter and attaches it to the built-in `space-admin` role, which requires
+> the admin stack to have admin access to the `root` Space.
 
 ### Stack Requirements
 

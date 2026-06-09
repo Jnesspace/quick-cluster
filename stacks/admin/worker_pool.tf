@@ -15,7 +15,17 @@ locals {
   deploy_workers   = tonumber(var.deploy_private_workers) > 0
   worker_pool_size = tonumber(var.deploy_private_workers)
   worker_pool_name = "${local.run_tag_k8s}-workers"
+
+  # KEDA autoscaling is only meaningful when we are actually deploying a pool.
+  enable_autoscaling = local.deploy_workers && var.enable_worker_autoscaling
+
+  # Prometheus exporter (promex) endpoint: explicit override, else derive from the
+  # current Spacelift account name (SaaS pattern: https://<account>.app.spacelift.io).
+  spacelift_api_endpoint = var.spacelift_api_endpoint != "" ? var.spacelift_api_endpoint : "https://${data.spacelift_account.this.name}.app.spacelift.io"
 }
+
+# Current account, used to derive the exporter API endpoint when not supplied.
+data "spacelift_account" "this" {}
 
 #──────────────────────────────────────────────────────────────────────────────
 # Step 1: Generate private key (only if deploying workers)
@@ -68,6 +78,37 @@ resource "spacelift_worker_pool" "this" {
 }
 
 #──────────────────────────────────────────────────────────────────────────────
+# Step 3b: Prometheus-exporter API key (autoscaling only)
+#
+# The Spacelift Prometheus exporter (spacelift-promex) authenticates to the
+# Spacelift API to publish the spacelift_worker_pool_runs_pending metric that
+# KEDA scales on. We create a dedicated API key and grant it read access to the
+# space that holds the worker pool. The secret is handed to the Kubernetes stack
+# via the (locked-down) S3 bucket below.
+#──────────────────────────────────────────────────────────────────────────────
+resource "spacelift_api_key" "promex" {
+  count = local.enable_autoscaling ? 1 : 0
+  name  = "${local.worker_pool_name}-promex"
+}
+
+# The exporter needs an admin key (some metric fields require admin access), so
+# attach the key to the built-in "space-admin" system role within the resource
+# space rather than minting a per-deployment role.
+# NOTE: reading system roles / attaching them requires the admin stack to have
+# admin access to the root Space.
+data "spacelift_role" "space_admin" {
+  count = local.enable_autoscaling ? 1 : 0
+  slug  = "space-admin"
+}
+
+resource "spacelift_role_attachment" "promex" {
+  count      = local.enable_autoscaling ? 1 : 0
+  api_key_id = spacelift_api_key.promex[0].id
+  role_id    = data.spacelift_role.space_admin[0].id
+  space_id   = var.resource_space_id
+}
+
+#──────────────────────────────────────────────────────────────────────────────
 # Step 4: Store credentials in S3 for Kubernetes stack to consume
 #
 # We store three objects:
@@ -105,7 +146,25 @@ resource "aws_s3_object" "worker_pool_config" {
     pool_id   = spacelift_worker_pool.this[0].id
     pool_size = local.worker_pool_size
     namespace = "spacelift-worker-controller-system"
+
+    # KEDA autoscaling settings consumed by deploy-workers-keda.sh
+    autoscaling_enabled = local.enable_autoscaling
+    min_workers         = var.min_workers
+    max_workers         = var.max_workers
+    api_key_id          = local.enable_autoscaling ? spacelift_api_key.promex[0].id : ""
+    api_endpoint        = local.enable_autoscaling ? local.spacelift_api_endpoint : ""
   })
+
+  server_side_encryption = "AES256"
+}
+
+# Prometheus-exporter API key secret (autoscaling only). Stored encrypted; the
+# Kubernetes stack loads it into the spacelift-promex credentials secret.
+resource "aws_s3_object" "worker_pool_api_key_secret" {
+  count   = local.enable_autoscaling ? 1 : 0
+  bucket  = aws_s3_bucket.kubeconfig_storage.bucket
+  key     = "worker-pool/api-key-secret"
+  content = spacelift_api_key.promex[0].secret
 
   server_side_encryption = "AES256"
 }
@@ -115,15 +174,21 @@ resource "aws_s3_object" "worker_pool_config" {
 #──────────────────────────────────────────────────────────────────────────────
 output "worker_pool_info" {
   value = local.deploy_workers ? {
-    enabled   = true
-    pool_id   = spacelift_worker_pool.this[0].id
-    pool_name = local.worker_pool_name
-    pool_size = local.worker_pool_size
-  } : {
-    enabled   = false
-    pool_id   = null
-    pool_name = null
-    pool_size = 0
+    enabled             = true
+    pool_id             = spacelift_worker_pool.this[0].id
+    pool_name           = local.worker_pool_name
+    pool_size           = local.worker_pool_size
+    autoscaling_enabled = local.enable_autoscaling
+    min_workers         = local.enable_autoscaling ? var.min_workers : null
+    max_workers         = local.enable_autoscaling ? var.max_workers : null
+    } : {
+    enabled             = false
+    pool_id             = null
+    pool_name           = null
+    pool_size           = 0
+    autoscaling_enabled = false
+    min_workers         = null
+    max_workers         = null
   }
   description = "Worker pool information for reference"
 }

@@ -1,0 +1,51 @@
+{{- /*
+  Optional HorizontalPodAutoscalers for the scalable Spacelift components.
+  The upstream spacelift-self-hosted chart only exposes static replicaCounts,
+  so we add HPAs here. Requires metrics-server in the cluster (k3s bundles it).
+  The scheduler is intentionally excluded — keep it a singleton.
+
+  NOTE: when an HPA is enabled for a component, leave its replicaCount at the
+  desired minimum; `helm upgrade` resets replicas to that value and the HPA
+  takes over from there.
+*/ -}}
+{{- range $name := (list "server" "drain") }}
+{{- $cfg := index $.Values.autoscaling $name }}
+{{- if $cfg.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: spacelift-{{ $name }}
+  labels:
+    app.kubernetes.io/part-of: spacelift
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: spacelift-{{ $name }}
+  minReplicas: {{ $cfg.minReplicas }}
+  maxReplicas: {{ $cfg.maxReplicas }}
+  metrics:
+    {{- if $cfg.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $cfg.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if $cfg.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ $cfg.targetMemoryUtilizationPercentage }}
+    {{- end }}
+  {{- with $cfg.behavior }}
+  behavior:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
+{{- end }}

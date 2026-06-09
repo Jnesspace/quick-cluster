@@ -1,0 +1,9 @@
+apiVersion: v2
+name: postgres
+description: >-
+  Minimal single-replica PostgreSQL for Spacelift self-hosted, backed by a PVC.
+  Intended for low-cost on-prem / k3s deployments. NOTE: an in-cluster database
+  is convenient but not recommended for production durability — back up the PVC.
+type: application
+version: 0.1.0
+appVersion: "16"

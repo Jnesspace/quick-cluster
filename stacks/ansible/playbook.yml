@@ -31,10 +31,23 @@
   vars:
     k3s_version: "v1.28.5+k3s1"
   tasks:
+    - name: Get IMDSv2 token
+      ansible.builtin.uri:
+        url: http://169.254.169.254/latest/api/token
+        method: PUT
+        headers:
+          X-aws-ec2-metadata-token-ttl-seconds: "21600"
+        return_content: yes
+        timeout: 10
+      register: imds_token
+      when: not ansible_check_mode
+
     - name: Get public IP from EC2 metadata service
       ansible.builtin.uri:
         url: http://169.254.169.254/latest/meta-data/public-ipv4
         method: GET
+        headers:
+          X-aws-ec2-metadata-token: "{{ imds_token.content }}"
         return_content: yes
         timeout: 10
       register: ec2_public_ip
@@ -191,10 +204,24 @@
   vars:
     k3s_version: "v1.28.5+k3s1"
   tasks:
+    - name: Get IMDSv2 token from server
+      ansible.builtin.uri:
+        url: http://169.254.169.254/latest/api/token
+        method: PUT
+        headers:
+          X-aws-ec2-metadata-token-ttl-seconds: "21600"
+        return_content: yes
+        timeout: 10
+      register: server_imds_token
+      delegate_to: "{{ groups['tofu'][0] }}"
+      when: not ansible_check_mode
+
     - name: Get server public IP from EC2 metadata
       ansible.builtin.uri:
         url: http://169.254.169.254/latest/meta-data/public-ipv4
         method: GET
+        headers:
+          X-aws-ec2-metadata-token: "{{ server_imds_token.content }}"
         return_content: yes
         timeout: 10
       register: server_public_ip
