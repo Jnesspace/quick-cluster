@@ -179,7 +179,7 @@ stack:
       - name: TF_VAR_aws_default_region
         value: ${{ inputs.aws_default_region }}
       - name: TF_VAR_eks_cluster_version
-        value: ${{ inputs.eks_cluster_version }}
+        value: "${{ inputs.eks_cluster_version }}"
       - name: TF_VAR_worker_pool_id
         value: ${{ inputs.worker_pool_id }}
       - name: TF_VAR_deploy_private_workers
