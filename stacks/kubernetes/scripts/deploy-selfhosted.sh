@@ -28,7 +28,7 @@
 
 set -euo pipefail
 
-CHART_DIR="/mnt/workspace/stacks/kubernetes/selfhosted"
+CHART_DIR="/mnt/workspace/source/stacks/kubernetes/selfhosted"
 MOUNTED_SECRETS="/mnt/workspace/values-secrets.yaml"
 SSM_SECRETS_PARAM="${SELFHOSTED_SSM_SECRETS:-/spacelift-selfhosted/values-secrets}"
 NAMESPACE="spacelift"

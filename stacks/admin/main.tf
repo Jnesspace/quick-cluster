@@ -357,7 +357,10 @@ resource "spacelift_stack" "tofusible-kubernetes" {
 
   repository   = "Quick-Cluster" #UPDATE_TO_YOUR_VALUE
   branch       = var.repo_branch
-  project_root = "stacks/kubernetes"
+  # Point the KUBERNETES workflow at just the manifests dir; it recursively
+  # accumulates YAML, so it must not see the vendored Helm chart (Chart.yaml has
+  # no kind) or the scripts. Those are reached by the hooks via absolute path.
+  project_root = "stacks/kubernetes/manifests"
 
   kubernetes {
     kubernetes_workflow_tool = "KUBERNETES"
@@ -493,10 +496,10 @@ resource "spacelift_context" "kubeconfig_hooks" {
   after_apply = [
     # Karpenter first (EKS only; no-ops on k3s) so node capacity is elastic before
     # the worker/monitoring workloads below need scheduling.
-    "KUBECONFIG=/mnt/workspace/.kube/config bash /mnt/workspace/stacks/kubernetes/scripts/deploy-karpenter.sh",
-    "KUBECONFIG=/mnt/workspace/.kube/config bash /mnt/workspace/stacks/kubernetes/scripts/deploy-workers-keda.sh",
+    "KUBECONFIG=/mnt/workspace/.kube/config bash /mnt/workspace/source/stacks/kubernetes/scripts/deploy-karpenter.sh",
+    "KUBECONFIG=/mnt/workspace/.kube/config bash /mnt/workspace/source/stacks/kubernetes/scripts/deploy-workers-keda.sh",
     # Optional full self-hosted Spacelift install (no-ops unless SELFHOSTED_ENABLED=true).
-    "KUBECONFIG=/mnt/workspace/.kube/config bash /mnt/workspace/stacks/kubernetes/scripts/deploy-selfhosted.sh",
+    "KUBECONFIG=/mnt/workspace/.kube/config bash /mnt/workspace/source/stacks/kubernetes/scripts/deploy-selfhosted.sh",
   ]
 }
 
