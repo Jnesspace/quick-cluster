@@ -44,6 +44,11 @@ module "eks" {
       name           = "${var.run_tag}-system"
       instance_types = [var.eks_system_instance_type]
 
+      # Use a fixed (short) role name; the module's default name_prefix
+      # "<run_tag>-system-eks-node-group-" can exceed AWS's 38-char prefix limit.
+      iam_role_use_name_prefix = false
+      iam_role_name            = "${var.run_tag}-system-ng"
+
       min_size     = 2
       max_size     = 3
       desired_size = 2
