@@ -1,2 +1,7 @@
 /privateworkersetup
 stacks/kubernetes/manifests/workerpool-secret.yaml
+
+# Local operator scratch (kubeconfigs, etc.) and any stray secrets files
+/temp/
+**/values-secrets.yaml
+*.kubeconfig

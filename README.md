@@ -111,31 +111,48 @@ system pool cause Karpenter to add nodes on demand and consolidate them back whe
 
 ## Self-Hosted Spacelift (optional toggle)
 
-Set **Install Self-Hosted Spacelift** = `true` to deploy a full self-hosted Spacelift instance
-onto the cluster from the vendored umbrella chart at `stacks/kubernetes/selfhosted/` (the Spacelift
-app — server/drain/scheduler/MQTT — plus in-cluster MinIO and Postgres). The toggle also installs
-**ingress-nginx** and **cert-manager**. Recommended only with `cluster_type = eks` (Karpenter
-provides the compute; gp3 EBS backs the MinIO/Postgres volumes).
+Set **Install Self-Hosted Spacelift** = `true` (with `cluster_type = eks`) to deploy a full
+self-hosted Spacelift instance from the vendored umbrella chart at `stacks/kubernetes/selfhosted/`
+(the Spacelift app — server/drain/scheduler/MQTT — plus in-cluster MinIO and Postgres on gp3 EBS).
+Defaults to **no-DNS / port-forward** access; set `selfhosted_acme_email` to instead install
+ingress-nginx + cert-manager for a real hostname/TLS.
 
-The chart needs values that have no safe defaults (a Spacelift **license JWT**, backend/launcher
-**images** from your entitlement, an **RSA encryption key**, admin/MinIO/Postgres passwords, your
-**domain**). These are supplied out-of-band so they never touch git or Terraform state:
+### One-time prerequisites (per AWS account — survive teardown)
 
-1. Enable the toggle and launch. The admin stack creates an auto-attached
-   `<prefix>selfhosted-secrets` context.
-2. Generate the RSA key (`stacks/kubernetes/selfhosted/scripts/gen-rsa-key.sh`) and fill in a copy
-   of `stacks/kubernetes/selfhosted/values-secrets.example.yaml`.
-3. In Spacelift, add that file to the secrets context as a **mounted file named
-   `values-secrets.yaml`** (it lands at `/mnt/workspace/values-secrets.yaml`).
-4. Re-run the Kubernetes stack. `deploy-selfhosted.sh` runs `helm upgrade --install … -f
-   values-secrets.yaml --skip-schema-validation` (the `--skip-schema-validation` flag is required
-   when the upstream chart runs as a subchart).
-5. Point DNS for your `serverHostname` and MinIO host at the ingress-nginx load balancer, set the
-   `cert-manager.io/cluster-issuer: letsencrypt` annotation in your values (if you supplied an ACME
-   email), and complete first-time setup at `https://<serverHostname>/`.
+The chart needs a Spacelift **license**, **container images**, and **secrets** that can't be
+defaulted. Do these once; they live in ECR/SSM (outside the stack lifecycle) and are reused on
+every deploy:
 
-If the toggle is on but no `values-secrets.yaml` is present, the script prints these instructions
-and skips the install (no half-applied state).
+1. **Images → ECR** (needs the self-hosted release bundle + docker):
+   `stacks/kubernetes/scripts/push-selfhosted-images.sh <ecr-registry> <region> <bundle>`
+   → push `spacelift-backend`/`spacelift-launcher`, note the refs.
+2. **Secrets → SSM**: fill a copy of `stacks/kubernetes/selfhosted/values-secrets.example.yaml`
+   (license JWT, RSA key via `scripts/gen-rsa-key.sh`, passwords, the ECR image refs from step 1;
+   for no-DNS keep `serverHostname: localhost:8080`, `objectStorage.publicUrl: http://localhost:9000`,
+   ingress disabled). Then:
+   `aws ssm put-parameter --type SecureString --name /spacelift-selfhosted/values-secrets --value file://values-secrets.yaml`
+
+`deploy-selfhosted.sh` pulls those secrets from SSM at run time (or from a `values-secrets.yaml`
+mounted file on the auto-created `<prefix>selfhosted-secrets` context). Nothing secret touches git
+or Terraform state.
+
+### Launch (one click)
+
+Blueprint inputs: `cluster_type=eks`, `aws_default_region` matching where the ECR/SSM live,
+`enable_selfhosted=true`, and `eks_admin_principal_arn` = your IAM user/role ARN (so you can reach
+the cluster afterward). The cascade installs Karpenter, then the chart — no manual steps.
+
+### Reach the UI
+
+```bash
+aws eks update-kubeconfig --name <run_tag>-eks --region <region>   # if not already
+kubectl -n spacelift port-forward svc/spacelift-server 8080:80     # UI
+kubectl -n spacelift port-forward svc/minio 9000:9000             # object up/downloads
+# open http://localhost:8080  — login: admin / (admin.password from your values)
+```
+
+If the toggle is on but no secrets are found (SSM param or mounted file), the script prints
+instructions and skips the install (no half-applied state).
 
 ## Configuration
 

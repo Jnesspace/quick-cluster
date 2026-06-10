@@ -155,6 +155,12 @@ variable "eks_cluster_version" {
   default     = "1.35"
 }
 
+variable "eks_admin_principal_arn" {
+  type        = string
+  description = "Optional IAM user/role ARN granted EKS cluster-admin (so an operator can use kubectl/Freelens). eks cluster_type only."
+  default     = ""
+}
+
 #──────────────────────────────────────────────────────────────────────────────
 # Self-hosted Spacelift (optional)
 #

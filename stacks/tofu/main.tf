@@ -103,6 +103,12 @@ variable "karpenter_version" {
   default     = "1.12.1"
 }
 
+variable "eks_admin_principal_arn" {
+  type        = string
+  description = "Optional IAM user/role ARN to grant EKS cluster-admin via an access entry, so an operator can reach the cluster with kubectl/Freelens. Leave blank to only grant the Spacelift integration (creator) role."
+  default     = ""
+}
+
 variable "cluster_access_cidr" {
   type        = string
   description = "CIDR allowed to reach the k3s nodes' SSH (22), Kubernetes API (6443) and NodePort range. Defaults to the whole internet to keep public Spacelift workers working; narrow it to your IP/range (or your private worker egress) to harden. NOTE: agents join the server over its public IP, so this must include the nodes' own public IPs if narrowed."

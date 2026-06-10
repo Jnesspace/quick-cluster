@@ -29,6 +29,22 @@ module "eks" {
   # allowing all stacks using the same AWS integration to access the cluster
   enable_cluster_creator_admin_permissions = true
 
+  # Optionally grant a human/operator IAM principal cluster-admin so they can
+  # reach the cluster with kubectl/Freelens after deploy (the creator entry above
+  # only covers the Spacelift integration role). Set eks_admin_principal_arn to
+  # your IAM user/role ARN.
+  access_entries = var.eks_admin_principal_arn != "" ? {
+    operator = {
+      principal_arn = var.eks_admin_principal_arn
+      policy_associations = {
+        admin = {
+          policy_arn   = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = { type = "cluster" }
+        }
+      }
+    }
+  } : {}
+
   # Enable IRSA for service accounts
   enable_irsa = true
 

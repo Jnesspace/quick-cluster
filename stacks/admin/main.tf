@@ -101,6 +101,12 @@ module "stack_opentofu" {
       sensitive = false
     }
 
+    # Optional operator IAM principal granted EKS cluster-admin (eks only)
+    TF_VAR_eks_admin_principal_arn = {
+      value     = var.eks_admin_principal_arn
+      sensitive = false
+    }
+
     # We pass this to the OpenTofu stack so it can be used in the inventory (k3s only)
     TF_VAR_private_key_path = {
       value     = local.private_key_full_path
@@ -355,8 +361,8 @@ resource "spacelift_stack" "tofusible-kubernetes" {
   space_id    = var.resource_space_id
   description = "Stack that deploys hello world app to K3s cluster"
 
-  repository   = "Quick-Cluster" #UPDATE_TO_YOUR_VALUE
-  branch       = var.repo_branch
+  repository = "Quick-Cluster" #UPDATE_TO_YOUR_VALUE
+  branch     = var.repo_branch
   # Point the KUBERNETES workflow at just the manifests dir; it recursively
   # accumulates YAML, so it must not see the vendored Helm chart (Chart.yaml has
   # no kind) or the scripts. Those are reached by the hooks via absolute path.

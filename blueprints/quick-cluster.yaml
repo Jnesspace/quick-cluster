@@ -29,6 +29,12 @@ inputs:
     type: short_text
     default: "1.35"
 
+  - id: eks_admin_principal_arn
+    name: EKS Operator IAM ARN (optional)
+    description: "IAM user/role ARN to grant EKS cluster-admin so you can connect with kubectl/Freelens after deploy (e.g. arn:aws:iam::<acct>:user/you). Leave blank to grant only the Spacelift integration role."
+    type: short_text
+    default: ""
+
 
   - id: worker_pool_id
     name: Worker Pool ID for All Stacks (optional)
@@ -180,6 +186,8 @@ stack:
         value: ${{ inputs.aws_default_region }}
       - name: TF_VAR_eks_cluster_version
         value: "${{ inputs.eks_cluster_version }}"
+      - name: TF_VAR_eks_admin_principal_arn
+        value: ${{ inputs.eks_admin_principal_arn }}
       - name: TF_VAR_worker_pool_id
         value: ${{ inputs.worker_pool_id }}
       - name: TF_VAR_deploy_private_workers

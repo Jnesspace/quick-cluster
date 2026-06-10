@@ -132,7 +132,7 @@ if [ -n "${SELFHOSTED_ACME_EMAIL:-}" ]; then
   kubectl -n ingress-nginx get svc ingress-nginx-controller -o wide || true
 else
   echo "🔌 No-DNS mode. Access the UI from your machine with:"
-  echo "    kubectl -n ${NAMESPACE} port-forward svc/spacelift 8080:80"
+  echo "    kubectl -n ${NAMESPACE} port-forward svc/spacelift-server 8080:80"
   echo "    kubectl -n ${NAMESPACE} port-forward svc/minio 9000:9000   # for object up/downloads"
-  echo "    then open http://localhost:8080"
+  echo "    then open http://localhost:8080  (login: admin / admin.password from values)"
 fi
