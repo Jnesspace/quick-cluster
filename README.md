@@ -154,6 +154,28 @@ kubectl -n spacelift port-forward svc/minio 9000:9000             # object up/do
 If the toggle is on but no secrets are found (SSM param or mounted file), the script prints
 instructions and skips the install (no half-applied state).
 
+### Workers (auto-registration)
+
+Set **Auto-Register Self-Hosted Workers** = `true` to deploy in-cluster workers that **auto-register**
+with the self-hosted instance — no manual pool, CSR, or token. The `spacelift-workerpool-controller`
+creates and manages the pool itself when it finds a `spacelift-api-credentials` secret + a tokenless
+`WorkerPool` CR (`deploy-selfhosted-workers.sh`). Workers run in `spacelift-workers` and reach the
+server/MQTT over in-cluster service DNS (no load balancer).
+
+One-time prerequisite: create a Spacelift **API key in the self-hosted instance** with the
+**"Worker pool controller"** role, then store a JSON config in SSM:
+
+```bash
+aws ssm put-parameter --type SecureString --name /spacelift-selfhosted/workers --value '{
+  "keyId":"<self-hosted api key id>",
+  "keySecret":"<self-hosted api key secret>",
+  "endpoint":"http://spacelift-server.spacelift.svc.cluster.local",
+  "poolName":"selfhosted-workers",
+  "poolSize":2,
+  "launcherImage":"<acct>.dkr.ecr.<region>.amazonaws.com/spacelift-launcher:v5.1.2"
+}'
+```
+
 ## Configuration
 
 See `stacks/admin/README.md` for detailed configuration options including:

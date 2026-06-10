@@ -181,3 +181,9 @@ variable "selfhosted_acme_email" {
   description = "Email for the Let's Encrypt ClusterIssuer used by the self-hosted ingress (blank = skip issuer; bring your own TLS)."
   default     = ""
 }
+
+variable "enable_selfhosted_workers" {
+  type        = bool
+  description = "Deploy auto-registering in-cluster workers for the self-hosted instance (needs a self-hosted API key + config in SSM /spacelift-selfhosted/workers)."
+  default     = false
+}

@@ -96,6 +96,15 @@ inputs:
     type: short_text
     default: ""
 
+  - id: enable_selfhosted_workers
+    name: Auto-Register Self-Hosted Workers
+    description: "Deploy in-cluster workers that auto-register with the self-hosted instance (no manual pool/CSR). Requires a self-hosted API key with the 'Worker pool controller' role + config in SSM /spacelift-selfhosted/workers."
+    type: select
+    options:
+      - "false"
+      - "true"
+    default: "false"
+
 
 
   - id: instance_type
@@ -202,6 +211,8 @@ stack:
         value: "${{ inputs.enable_selfhosted }}"
       - name: TF_VAR_selfhosted_acme_email
         value: ${{ inputs.selfhosted_acme_email }}
+      - name: TF_VAR_enable_selfhosted_workers
+        value: "${{ inputs.enable_selfhosted_workers }}"
       - name: TF_VAR_instance_type
         value: ${{ inputs.instance_type }}
       - name: TF_VAR_root_volume_size

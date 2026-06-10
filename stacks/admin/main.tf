@@ -429,6 +429,13 @@ resource "spacelift_environment_variable" "kubernetes_selfhosted_acme_email" {
   value    = var.selfhosted_acme_email
 }
 
+# Auto-registering workers for the self-hosted instance (deploy-selfhosted-workers.sh)
+resource "spacelift_environment_variable" "kubernetes_selfhosted_workers" {
+  stack_id = spacelift_stack.tofusible-kubernetes.id
+  name     = "SELFHOSTED_WORKERS_ENABLED"
+  value    = tostring(var.enable_selfhosted_workers)
+}
+
 # Context that carries the user-supplied self-hosted secrets/overrides. The admin
 # stack only creates the (auto-attached) context; the operator adds a mounted file
 # named "values-secrets.yaml" (license, admin/RSA/DB/MinIO secrets, domain, image
@@ -506,6 +513,8 @@ resource "spacelift_context" "kubeconfig_hooks" {
     "KUBECONFIG=/mnt/workspace/.kube/config bash /mnt/workspace/source/stacks/kubernetes/scripts/deploy-workers-keda.sh",
     # Optional full self-hosted Spacelift install (no-ops unless SELFHOSTED_ENABLED=true).
     "KUBECONFIG=/mnt/workspace/.kube/config bash /mnt/workspace/source/stacks/kubernetes/scripts/deploy-selfhosted.sh",
+    # Optional auto-registering workers for the self-hosted instance (no-ops unless SELFHOSTED_WORKERS_ENABLED=true).
+    "KUBECONFIG=/mnt/workspace/.kube/config bash /mnt/workspace/source/stacks/kubernetes/scripts/deploy-selfhosted-workers.sh",
   ]
 }
 
