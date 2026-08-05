@@ -2,7 +2,7 @@
 # Private Worker Pool Auto-Provisioning
 #
 # When deploy_private_workers > 0, this creates:
-# 1. A TLS private key (ECDSA P384)
+# 1. A TLS private key (RSA 4096 - required, see Step 1)
 # 2. A Certificate Signing Request (CSR) from that key
 # 3. A Spacelift worker pool registered with that CSR
 # 4. S3 objects containing the credentials for K8s deployment
@@ -20,13 +20,17 @@ locals {
 #──────────────────────────────────────────────────────────────────────────────
 # Step 1: Generate private key (only if deploying workers)
 #
-# We use ECDSA P384 which provides strong security with smaller key sizes
-# than RSA, resulting in faster operations.
+# This MUST be RSA. Spacelift encrypts each run's workspace to the worker
+# pool's public key before handing it to a worker, and that path only supports
+# RSA. An ECDSA pool key is accepted when the CSR is submitted and the workers
+# register and report IDLE, so the pool looks healthy - but every run then dies
+# in PREPARING with "Error encrypting workspace", before the worker executes
+# anything. Do not "optimise" this back to ECDSA.
 #──────────────────────────────────────────────────────────────────────────────
 resource "tls_private_key" "worker_pool" {
-  count       = local.deploy_workers ? 1 : 0
-  algorithm   = "ECDSA"
-  ecdsa_curve = "P384"
+  count     = local.deploy_workers ? 1 : 0
+  algorithm = "RSA"
+  rsa_bits  = 4096
 }
 
 #──────────────────────────────────────────────────────────────────────────────
