@@ -303,7 +303,7 @@ resource "spacelift_stack" "tofusible-kubernetes" {
 
   repository   = "Quick-Cluster"  #UPDATE_TO_YOUR_VALUE
   branch       = var.repo_branch
-  project_root = "stacks/kubernetes"
+  project_root = "stacks/cache-test-kubernetes"
 
   kubernetes {
     kubernetes_workflow_tool = "KUBERNETES"
