@@ -23,16 +23,6 @@ aws s3 cp s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml "$KUBECONFIG_FILE"
 # Set proper permissions
 chmod 600 "$KUBECONFIG_FILE"
 
-# Debug: Show what we downloaded
-echo "🔍 Contents of downloaded kubeconfig:"
-echo "======================================"
-cat "$KUBECONFIG_FILE"
-echo "======================================="
-
-# Debug: Check server URL specifically
-echo "🔍 Server URL in kubeconfig:"
-grep "server:" "$KUBECONFIG_FILE" || echo "No server URL found!"
-
 # Export KUBECONFIG explicitly with absolute path
 export KUBECONFIG="$KUBECONFIG_FILE"
 echo "🔧 KUBECONFIG set to: $KUBECONFIG"

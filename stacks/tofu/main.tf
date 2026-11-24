@@ -99,8 +99,8 @@ data "aws_vpc" "default" {
 # count is zero, so **no subnet is created** and downstream references to
 # `aws_subnet.generated[0]` are ignored by conditionals.
 resource "aws_subnet" "generated" {
-  count                   = var.create_new_subnet ? 1 : 0
-  vpc_id                  = data.aws_vpc.default.id
+  count  = var.create_new_subnet ? 1 : 0
+  vpc_id = data.aws_vpc.default.id
   # Choose a /24 far away from the typical default /20 ranges (0,16,32,48, etc.)
   cidr_block              = cidrsubnet(data.aws_vpc.default.cidr_block, 8, 200) # 172.31.200.0/24 within default VPC
   map_public_ip_on_launch = true
@@ -110,6 +110,22 @@ resource "aws_subnet" "generated" {
   }
 }
 # -----------------------------------------------------------------------------
+
+variable "provisioning_pool_id" {
+  type        = string
+  description = "Private EC2 worker pool that runs the provisioning stacks."
+}
+
+data "aws_instance" "provisioner" {
+  filter {
+    name   = "instance-state-name"
+    values = ["running"]
+  }
+  filter {
+    name   = "tag:Name"
+    values = ["sp5ft-${var.provisioning_pool_id}"]
+  }
+}
 
 # Create a security group that allows SSH and K3s traffic (k3s only)
 resource "aws_security_group" "tofusible_sg" {
@@ -130,7 +146,7 @@ resource "aws_security_group" "tofusible_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["${data.aws_instance.provisioner.public_ip}/32"]
   }
 
   # Kubernetes API server
@@ -139,7 +155,7 @@ resource "aws_security_group" "tofusible_sg" {
     from_port   = 6443
     to_port     = 6443
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["${data.aws_instance.provisioner.public_ip}/32"]
   }
 
   # K3s server port (for agent registration)
@@ -167,15 +183,6 @@ resource "aws_security_group" "tofusible_sg" {
     to_port     = 10250
     protocol    = "tcp"
     self        = true
-  }
-
-  # NodePort services range
-  ingress {
-    description = "NodePort services"
-    from_port   = 30000
-    to_port     = 32767
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
   }
 
   # All traffic within security group
@@ -266,7 +273,12 @@ resource "time_static" "deployment_time" {}
 resource "aws_instance" "tofu_dev_1" {
   count = local.is_k3s ? 1 : 0
 
-  ami                    = data.aws_ami.this.id
+  ami = data.aws_ami.this.id
+  metadata_options {
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 1
+  }
+
   key_name               = var.aws_private_key_name
   instance_type          = var.instance_type
   subnet_id              = local.subnet_id_final
@@ -297,7 +309,12 @@ resource "aws_instance" "tofu_dev_1" {
 resource "aws_instance" "tofu_dev_2" {
   count = local.is_k3s ? 1 : 0
 
-  ami                    = data.aws_ami.this.id
+  ami = data.aws_ami.this.id
+  metadata_options {
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 1
+  }
+
   key_name               = var.aws_private_key_name
   instance_type          = var.instance_type
   subnet_id              = local.subnet_id_final
@@ -328,7 +345,12 @@ resource "aws_instance" "tofu_dev_2" {
 resource "aws_instance" "tofu_dev_3" {
   count = local.is_k3s ? 1 : 0
 
-  ami                    = data.aws_ami.this.id
+  ami = data.aws_ami.this.id
+  metadata_options {
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 1
+  }
+
   key_name               = var.aws_private_key_name
   instance_type          = var.instance_type
   subnet_id              = local.subnet_id_final
@@ -369,9 +391,9 @@ module "host_tofu_dev_1" {
   ssh_private_key_file = var.private_key_path
   groups               = ["tofu", "dev", "k8s_nodes"]
   extra_vars = {
-    node_role    = "k8s-node-1"
-    private_ip   = aws_instance.tofu_dev_1[0].private_ip
-    instance_id  = aws_instance.tofu_dev_1[0].id
+    node_role   = "k8s-node-1"
+    private_ip  = aws_instance.tofu_dev_1[0].private_ip
+    instance_id = aws_instance.tofu_dev_1[0].id
   }
 }
 
@@ -385,9 +407,9 @@ module "host_tofu_dev_2" {
   ssh_private_key_file = var.private_key_path
   groups               = ["tofu", "dev", "k8s_nodes"]
   extra_vars = {
-    node_role    = "k8s-node-2"
-    private_ip   = aws_instance.tofu_dev_2[0].private_ip
-    instance_id  = aws_instance.tofu_dev_2[0].id
+    node_role   = "k8s-node-2"
+    private_ip  = aws_instance.tofu_dev_2[0].private_ip
+    instance_id = aws_instance.tofu_dev_2[0].id
   }
 }
 
@@ -401,9 +423,9 @@ module "host_tofu_dev_3" {
   ssh_private_key_file = var.private_key_path
   groups               = ["tofu", "dev", "k8s_nodes"]
   extra_vars = {
-    node_role    = "k8s-node-3"
-    private_ip   = aws_instance.tofu_dev_3[0].private_ip
-    instance_id  = aws_instance.tofu_dev_3[0].id
+    node_role   = "k8s-node-3"
+    private_ip  = aws_instance.tofu_dev_3[0].private_ip
+    instance_id = aws_instance.tofu_dev_3[0].id
   }
 }
 
@@ -430,16 +452,16 @@ output "inventory_tofu" {
 # Output AWS information for reference
 output "aws_info" {
   value = {
-    cluster_type        = var.cluster_type
-    vpc_id              = local.vpc_id_final
-    vpc_cidr_block      = (
+    cluster_type = var.cluster_type
+    vpc_id       = local.vpc_id_final
+    vpc_cidr_block = (
       var.subnet_id != null && var.subnet_id != ""
     ) ? data.aws_subnet.selected[0].cidr_block : data.aws_subnet.default_selected[0].cidr_block
-    subnet_id           = local.subnet_id_final
-    subnet_cidr_block   = (
+    subnet_id = local.subnet_id_final
+    subnet_cidr_block = (
       var.subnet_id != null && var.subnet_id != ""
     ) ? data.aws_subnet.selected[0].cidr_block : data.aws_subnet.default_selected[0].cidr_block
-    availability_zone   = (
+    availability_zone = (
       var.subnet_id != null && var.subnet_id != ""
     ) ? data.aws_subnet.selected[0].availability_zone : data.aws_subnet.default_selected[0].availability_zone
     security_group_id   = local.is_k3s ? aws_security_group.tofusible_sg[0].id : null

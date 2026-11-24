@@ -63,7 +63,7 @@ module "stack_opentofu" {
   repository_name = "Quick-Cluster"  #UPDATE_TO_YOUR_VALUE
   space_id        = var.resource_space_id
 
-  auto_deploy = true
+  auto_deploy = false
 
   aws_integration = {
     enabled = true
@@ -71,6 +71,11 @@ module "stack_opentofu" {
   }
 
   environment_variables = {
+    TF_VAR_provisioning_pool_id = {
+      value     = var.worker_pool_id
+      sensitive = false
+    }
+
     # Cluster type selection (k3s or eks)
     TF_VAR_cluster_type = {
       value     = var.cluster_type
@@ -212,8 +217,6 @@ module "stack_ansible" {
         "export PATH=\"$HOME/.local/bin:$PATH\"",
         "echo '🔍 Checking for kubeconfig files...'",
         "ls -la /tmp/kubeconfig* || echo 'No kubeconfig files found'",
-        "echo '📄 Contents of kubeconfig if found:'",
-        "test -f /tmp/kubeconfig-ready.yaml && head -20 /tmp/kubeconfig-ready.yaml || echo 'No kubeconfig to display'",
         "test -f /tmp/kubeconfig-ready.yaml && echo '✅ Found kubeconfig, uploading to S3...' || echo '❌ Kubeconfig not found'",
         "test -f /tmp/kubeconfig-ready.yaml && aws s3 cp /tmp/kubeconfig-ready.yaml s3://$KUBECONFIG_S3_BUCKET/kubeconfig-$(date +%Y%m%d-%H%M%S).yaml && echo '📤 Timestamped version uploaded' || true",
         "test -f /tmp/kubeconfig-ready.yaml && aws s3 cp /tmp/kubeconfig-ready.yaml s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml && echo '📤 Latest version uploaded' || true",
@@ -384,8 +387,6 @@ resource "spacelift_context" "kubeconfig_hooks" {
     "chmod 600 /mnt/workspace/.kube/config",
 
     # debug output
-    "echo '📥 Downloaded kubeconfig from S3:'",
-    "head -20 /mnt/workspace/.kube/config",
   ]
 
   # Runs before terraform apply / kubernetes apply
@@ -394,8 +395,6 @@ resource "spacelift_context" "kubeconfig_hooks" {
     "until aws s3api head-object --bucket $KUBECONFIG_S3_BUCKET --key kubeconfig-latest.yaml >/dev/null 2>&1; do echo '⏳ Waiting for kubeconfig in s3://$KUBECONFIG_S3_BUCKET...'; sleep 10; done",
     "aws s3 cp s3://$KUBECONFIG_S3_BUCKET/kubeconfig-latest.yaml /mnt/workspace/.kube/config",
     "chmod 600 /mnt/workspace/.kube/config",
-    "echo '📥 Downloaded kubeconfig from S3:'",
-    "head -20 /mnt/workspace/.kube/config",
   ]
 
   # Runs after terraform apply / kubernetes apply
